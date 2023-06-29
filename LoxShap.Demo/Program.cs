@@ -1,4 +1,6 @@
-﻿namespace LoxSharp.Core
+﻿using LoxSharp.Core;
+
+namespace LoxSharp.Demo
 {
     internal class Program
     {
