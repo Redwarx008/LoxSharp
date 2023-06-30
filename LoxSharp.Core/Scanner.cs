@@ -126,7 +126,7 @@ namespace LoxSharp.Core
                     }
                     else
                     {
-                        Interpreter.ScanError(_line, "Unexpected character.");
+                        throw new ScannerException(_line, "Unexpected character.");
                     }
                     break;
             }
@@ -182,8 +182,7 @@ namespace LoxSharp.Core
             }
             if (IsAtEnd())
             {
-                Interpreter.ScanError(_line, "Unterminated string.");
-                return;
+                throw new ScannerException(_line, "Unterminated string.");
             }
             // The closing ".
             ++_current;
