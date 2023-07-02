@@ -9,7 +9,7 @@ namespace LoxSharp.Core
     public class CompilerException : Exception
     {
         internal CompilerException(Token token, string message)
-            : base()
+            : base($"[line {token.Line}] Error at {token.Name} {message}")
         { }
     }
 }

@@ -12,6 +12,21 @@ namespace LoxSharp.Core
 
         private List<Value> _constants = new List<Value>(); 
 
-        private List<int> _lines = new List<int>(); 
+        private List<int> _lines = new List<int>();
+
+        public void WriteByte(byte b, int line)
+        {
+            _instructions.Add(b);
+            _lines.Add(line);
+        }
+
+        /// <summary>
+        /// Add a value to the constant list and return its index 
+        /// </summary>
+        public int AddConstant(Value val)
+        {
+            _constants.Add(val);
+            return _constants.Count - 1;
+        }
     }
 }
