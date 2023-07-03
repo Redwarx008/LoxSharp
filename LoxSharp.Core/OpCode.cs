@@ -9,6 +9,18 @@ namespace LoxSharp.Core
     internal enum OpCode : byte
     {
         CONSTANT,
+
+        NIL,
+        TRUE,
+        FALSE,
+
+        ADD,
+        SUBTRACT,
+        MULTIPLY,
+        DIVIDE,
+
+        NEGATE,
+
         RETURN
     }
 }

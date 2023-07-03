@@ -10,6 +10,8 @@ namespace LoxSharp.Core
 {
     internal struct Value
     {
+        private BasicData _data;
+        private object? _obj;
         internal enum ValueType
         {
             Null,
@@ -18,28 +20,38 @@ namespace LoxSharp.Core
         }
 
         [StructLayout(LayoutKind.Explicit)]
-        internal struct Data
+        internal struct BasicData
         {
             [FieldOffset(0)]
-            public double asDouble;
+            public double Double;
 
             [FieldOffset(0)]
-            public bool asBool;
-
-            [FieldOffset (0)]
-            public object asObject;
+            public bool Bool;
         }
 
-        public ValueType Type { get; private set; }  
+        public ValueType Type { get; private set; }
 
-        public Data Val { get; private set; }
+        public double AsDouble
+        {
+            get => _data.Double;
+            set => _data.Double = value;
+        }
+        public bool AsBool
+        {
+            get => _data.Bool;
+            set => _data.Bool = value;
+        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]  
         public bool IsNull() => Type == ValueType.Null;
 
         public static Value New(double val)
-            => new Value() { Type = ValueType.Double, Val = new Data() { asDouble = val} };
+        {
+            Value res = new Value();
+        }
         public static Value New(bool val)
-            => new Value() { Type = ValueType.Bool, Val = new Data() { asBool = val } };
+            => new Value() { Type = ValueType.Bool, _data = new BasicData() { Bool = val } };
+        public static Value New()
+            => new Value() { Type = ValueType.Null}
     }
 }
