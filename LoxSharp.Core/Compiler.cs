@@ -65,7 +65,7 @@ namespace LoxSharp.Core
             _rules[(int)TokenType.SEMICOLON] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.SLASH] = new ParseRule(null, Binary, Precedence.Factor);
             _rules[(int)TokenType.STAR] = new ParseRule(null, Binary, Precedence.Factor);
-            _rules[(int)TokenType.BANG] = new ParseRule(null, null, Precedence.None);
+            _rules[(int)TokenType.BANG] = new ParseRule(Unary, null, Precedence.None);
             _rules[(int)TokenType.BANG_EQUAL] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.EQUAL] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.EQUAL_EQUAL] = new ParseRule(null, null, Precedence.None);
@@ -206,7 +206,7 @@ namespace LoxSharp.Core
         private void Number()
         {
             double value = (double)_previous.Literal!;
-            EmitConstant(Value.New(value));
+            EmitConstant(new Value(value));
         }
 
         private void Unary()
@@ -217,7 +217,10 @@ namespace LoxSharp.Core
             ParsePrecedence(Precedence.Unary);
 
             switch (operatorType) 
-            { 
+            {
+                case TokenType.BANG:
+                    EmitByte((byte)OpCode.NOT);
+                    break;
                 case TokenType.MINUS:
                     EmitByte((byte)OpCode.NEGATE);
                     break;

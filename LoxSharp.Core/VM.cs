@@ -44,8 +44,11 @@ namespace LoxSharp.Core
                     case OpCode.DIVIDE:
                         BinaryOperator(instruction);
                         break;
+                    case OpCode.NOT:
+                        _stack.Push(new Value(_stack.Pop().IsFalsey));  
+                        break;
                     case OpCode.NEGATE:
-                        _stack.Push(Value.New(-_stack.Pop().AsDouble));
+                        _stack.Push(new Value(-_stack.Pop().AsDouble));
                         break;
                     case OpCode.RETURN:
                         Console.WriteLine(_stack.Pop());
@@ -73,23 +76,21 @@ namespace LoxSharp.Core
             Value b = _stack.Pop();
             Value a = _stack.Pop();
 
-            Value res = Value.New(0);
             switch(op)
             {
                 case OpCode.ADD:
-                    res.AsDouble = a.AsDouble + b.AsDouble;
+                    _stack.Push(a + b);
                     break;
                 case OpCode.SUBTRACT:
-                    res.AsDouble = a.AsDouble - b.AsDouble; 
+                    _stack.Push(a - b);
                     break;
                 case OpCode.MULTIPLY:
-                    res.AsDouble = a.AsDouble * b.AsDouble; 
+                    _stack.Push(a * b);
                     break;
                 case OpCode.DIVIDE:
-                    res.AsDouble = a.AsDouble / b.AsDouble; 
+                    _stack.Push(a / b);
                     break;
             }
-            _stack.Push(res);
         }
     }
 }

@@ -18,6 +18,7 @@ namespace LoxSharp.Core
         SUBTRACT,
         MULTIPLY,
         DIVIDE,
+        NOT,
 
         NEGATE,
 
