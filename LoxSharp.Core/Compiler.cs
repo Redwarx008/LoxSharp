@@ -66,15 +66,15 @@ namespace LoxSharp.Core
             _rules[(int)TokenType.SLASH] = new ParseRule(null, Binary, Precedence.Factor);
             _rules[(int)TokenType.STAR] = new ParseRule(null, Binary, Precedence.Factor);
             _rules[(int)TokenType.BANG] = new ParseRule(Unary, null, Precedence.None);
-            _rules[(int)TokenType.BANG_EQUAL] = new ParseRule(null, null, Precedence.None);
+            _rules[(int)TokenType.BANG_EQUAL] = new ParseRule(null, Binary, Precedence.Equality);
             _rules[(int)TokenType.EQUAL] = new ParseRule(null, null, Precedence.None);
-            _rules[(int)TokenType.EQUAL_EQUAL] = new ParseRule(null, null, Precedence.None);
-            _rules[(int)TokenType.GREATER] = new ParseRule(null, null, Precedence.None);
-            _rules[(int)TokenType.GREATER_EQUAL] = new ParseRule(null, null, Precedence.None);
-            _rules[(int)TokenType.LESS] = new ParseRule(null, null, Precedence.None);
-            _rules[(int)TokenType.LESS_EQUAL] = new ParseRule(null, null, Precedence.None);
-            _rules[(int)TokenType.IDENTIFIER] = new ParseRule(null, null, Precedence.None);
-            _rules[(int)TokenType.STRING] = new ParseRule(null, null, Precedence.None);
+            _rules[(int)TokenType.EQUAL_EQUAL] = new ParseRule(null, Binary, Precedence.Equality);
+            _rules[(int)TokenType.GREATER] = new ParseRule(null, Binary, Precedence.Comparison);
+            _rules[(int)TokenType.GREATER_EQUAL] = new ParseRule(null, Binary, Precedence.Comparison);
+            _rules[(int)TokenType.LESS] = new ParseRule(null, Binary, Precedence.Comparison);
+            _rules[(int)TokenType.LESS_EQUAL] = new ParseRule(null, Binary, Precedence.Comparison);
+            _rules[(int)TokenType.IDENTIFIER] = new ParseRule(Variable, null, Precedence.None);
+            _rules[(int)TokenType.STRING] = new ParseRule(String, null, Precedence.None);
             _rules[(int)TokenType.NUMBER] = new ParseRule(Number, null, Precedence.None);
             _rules[(int)TokenType.AND] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.CLASS] = new ParseRule(null, null, Precedence.None);
@@ -103,11 +103,18 @@ namespace LoxSharp.Core
             Advance();
             while(_current.Type != TokenType.EOF)
             {
-                Expression();
+                Declaration();
             }
+            EndCompiler();
             return chunk;   
         }
 
+        private void EndCompiler()
+        {
+            EmitReturn();
+        }
+
+        #region utility method
         [MethodImpl(MethodImplOptions.AggressiveInlining)]  
         private void Advance()
         {
@@ -182,10 +189,15 @@ namespace LoxSharp.Core
             return (byte)index;
         }
 
-        private void EndCompiler()
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private ParseRule GetRule(TokenType type)
         {
-            EmitReturn();
+            return _rules[(int)type];
         }
+
+        #endregion
+
+        #region Parse literal method
 
         private void Literal()
         {
@@ -209,6 +221,20 @@ namespace LoxSharp.Core
             EmitConstant(new Value(value));
         }
 
+        private void String()
+        {
+            EmitConstant(new Value((string)_previous.Literal!));
+        }
+
+        private void Variable()
+        {
+
+        }
+
+        private void NamedVariable(Token name)
+        {
+
+        }
         private void Unary()
         {
             TokenType operatorType = _previous.Type;
@@ -237,6 +263,24 @@ namespace LoxSharp.Core
 
             switch (operatorType) 
             {
+                case TokenType.BANG_EQUAL:
+                    EmitBytes((byte)OpCode.EQUAL, (byte)OpCode.NOT);
+                    break;
+                case TokenType.EQUAL_EQUAL:
+                    EmitByte((byte)OpCode.EQUAL);
+                    break;
+                case TokenType.GREATER:
+                    EmitByte((byte)OpCode.GREATER);
+                    break;
+                case TokenType.GREATER_EQUAL:
+                    EmitBytes((byte)OpCode.LESS, (byte)OpCode.NOT);
+                    break;
+                case TokenType.LESS:
+                    EmitByte((byte)OpCode.LESS);
+                    break;
+                case TokenType.LESS_EQUAL:
+                    EmitBytes((byte)OpCode.GREATER, (byte)OpCode.NOT);  
+                    break;
                 case TokenType.PLUS:
                     EmitByte((byte)OpCode.ADD);
                     break;
@@ -259,6 +303,11 @@ namespace LoxSharp.Core
             Consume(TokenType.RIGHT_PAREN, "Expect ')' after expression.");
         }
 
+
+        #endregion
+
+        #region Parse expression or statement method
+
         /// <summary>
         /// We simply parse the lowest precedence level, 
         /// which subsumes all of the higher-precedence expressions too. 
@@ -268,12 +317,57 @@ namespace LoxSharp.Core
             ParsePrecedence(Precedence.Assignment);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private ParseRule GetRule(TokenType type)
+        private void ExpressionStatement()
         {
-            return _rules[(int)type];
+            Expression();
+            Consume(TokenType.SEMICOLON, "Expect ';' after expression.");
+            EmitByte((byte)OpCode.Pop);
+        }
+        private void Statement()
+        {
+            if(Match(TokenType.PRINT)) 
+            {
+                PrintStatement();
+            }
+            else
+            {
+                ExpressionStatement();  
+            }
         }
 
+        private void PrintStatement()
+        {
+            Expression();
+            Consume(TokenType.SEMICOLON, "Expect ';' after value.");
+            EmitByte((byte)OpCode.Print);
+        }
+        private void Declaration()
+        {
+            if(Match(TokenType.VAR))
+            {
+                VarDeclaration();   
+            }
+            else 
+            {
+                Statement();    
+            }
+        }
+
+        private void VarDeclaration()
+        {
+            byte global = ParseIdentifier("Expect variable name.");
+
+            if(Match(TokenType.EQUAL)) 
+            {
+                Expression();
+            }
+            else
+            {
+                EmitByte((byte)OpCode.NIL);
+            }
+            Consume(TokenType.SEMICOLON, "Expect ';' after variable declaration.");
+            DefineVariable(global); 
+        }
         private void ParsePrecedence(Precedence precedence)
         {
             Advance();
@@ -293,5 +387,17 @@ namespace LoxSharp.Core
                 infixRule();
             }
         }
+
+        private byte ParseIdentifier(string errorMessage)
+        {
+            Consume(TokenType.IDENTIFIER, errorMessage);
+            return MakeConstant(new Value((string)_previous.Literal!));
+        }
+
+        private void DefineVariable(byte global)
+        {
+            EmitBytes((byte)OpCode.Define_Global, global);
+        }
+        #endregion
     }
 }

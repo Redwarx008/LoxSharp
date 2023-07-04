@@ -12,12 +12,14 @@ namespace LoxSharp.Core
 
         public List<Value> Constants { get; private set; } = new List<Value>(); 
 
-        private List<int> _lines = new List<int>();
+        public IReadOnlyList<int> LineNumbers => _lineNumbers;
+
+        private List<int> _lineNumbers = new List<int>();
 
         public void WriteByte(byte b, int line)
         {
             Instructions.Add(b);
-            _lines.Add(line);
+            _lineNumbers.Add(line);
         }
 
         /// <summary>

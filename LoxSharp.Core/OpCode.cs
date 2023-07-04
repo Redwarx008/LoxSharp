@@ -14,6 +14,14 @@ namespace LoxSharp.Core
         TRUE,
         FALSE,
 
+        Pop,
+        Define_Global,
+        Get_Global,
+
+        EQUAL,
+        GREATER,
+        LESS,
+
         ADD,
         SUBTRACT,
         MULTIPLY,
@@ -22,6 +30,7 @@ namespace LoxSharp.Core
 
         NEGATE,
 
+        Print,
         RETURN
     }
 }

@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -8,15 +10,18 @@ using System.Threading.Tasks;
 
 namespace LoxSharp.Core
 {
-    internal struct Value
+    internal struct Value : IEquatable<Value>
     {
+        private ValueType _type;
         private BasicData _data;
         private object? _obj = null;
+
         internal enum ValueType
         {
             Null,
             Bool,
-            Double
+            Double,
+            String,
         }
 
         [StructLayout(LayoutKind.Explicit)]
@@ -28,15 +33,35 @@ namespace LoxSharp.Core
             [FieldOffset(0)]
             public bool Bool;
         }
+        public readonly double AsDouble
+        {
+            get
+            {
+                Debug.Assert(IsNumber);
+                return _data.Double;
+            }
+        }
+        public readonly bool AsBool
+        {
+            get
+            {
+                Debug.Assert(IsBool);
+                return _data.Bool;
+            }
+        }
+        public readonly string AsString
+        {
+            get
+            {
+                Debug.Assert(IsString);
+                return (string)_obj!;
+            }
+        }
 
-        public ValueType Type { get; private set; }
-
-        public readonly double AsDouble => _data.Double;
-        public readonly bool AsBool => _data.Bool;
-
-        public bool IsNull => Type == ValueType.Null;
-
-        public bool IsFalsey => Type == ValueType.Null || (Type == ValueType.Bool && AsBool == false);
+        public readonly bool IsNull => _type == ValueType.Null;
+        public readonly bool IsBool => _type == ValueType.Bool;
+        public readonly bool IsNumber => _type == ValueType.Double;
+        public readonly bool IsString => _type == ValueType.String;  
 
         public Value(double val)
         {
@@ -44,7 +69,7 @@ namespace LoxSharp.Core
             {
                 Double = val,
             };
-            Type = ValueType.Double;
+            _type = ValueType.Double;
         }
 
         public Value(bool val)
@@ -53,49 +78,159 @@ namespace LoxSharp.Core
             {
                 Bool = val,
             };
-            Type = ValueType.Bool;
+            _type = ValueType.Bool;
+        }
+
+        public Value(string val)
+        {
+            _data = default;
+            _type = ValueType.String;
+            _obj = val; 
         }
 
         public Value()
         {
             _data = default;
-            Type = ValueType.Null;
+            _type = ValueType.Null;
+            _obj = null;    
         }
 
+        public bool Equals(Value other)
+        {
+            if (_type != other._type)
+            {
+                return false;
+            }
+            switch (_type)
+            {
+                case ValueType.Bool:
+                    return AsBool == other.AsBool;
+                case ValueType.Double:
+                    return AsDouble == other.AsDouble;
+                case ValueType.String:
+                    return AsString == other.AsString;
+                case ValueType.Null:
+                    return true;
+                default: return false; // Unreachable.
+            }
+        }
+
+        public override bool Equals([NotNullWhen(true)] object? obj)
+        {
+            if(obj == null)
+            {
+                return false;
+            }
+            return obj is Value value && Equals(value);  
+        }
+
+        public override int GetHashCode()
+        {
+            switch(_type) 
+            {
+                case ValueType.Bool:
+                    return AsBool.GetHashCode();
+                case ValueType.Double:
+                    return AsDouble.GetHashCode();
+                case ValueType.Null:
+                case ValueType.String:
+                default:
+                    return _obj!.GetHashCode();
+            }
+        }
+
+        public override string ToString()
+        {
+            switch(_type)
+            {
+                case ValueType.Null:
+                    return "null";
+                case ValueType.Bool:
+                    return AsBool.ToString();
+                case ValueType.Double:
+                    return AsDouble.ToString();
+                case ValueType.String:
+                    return AsString;
+                default:
+                    return "type not implemented";
+            }
+        }
         public static Value operator +(Value a, Value b)
         {
-            if (a.Type == ValueType.Double && b.Type == ValueType.Double)
+            if (a.IsNumber && b.IsNumber)
             {
                 return new Value(a.AsDouble + b.AsDouble);
             }
-            throw new RuntimeException("Operands must be two numbers or two strings.");
+            else if(a.IsString && b.IsString)
+            {
+                return new Value(a.AsString + b.AsString);  
+            }
+            else if(a.IsString && b.IsNumber)
+            {
+                return new Value(a.AsString + b.AsDouble.ToString());
+            }
+            return new Value(); 
         }
 
         public static Value operator -(Value a, Value b)
         {
-            if (a.Type == ValueType.Double && b.Type == ValueType.Double)
+            if (a.IsNumber && b.IsNumber)
             {
                 return new Value(a.AsDouble - b.AsDouble);
             }
-            throw new RuntimeException("Operands must be two numbers.");
+            return new Value();
         }
 
         public static Value operator *(Value a, Value b)
         {
-            if (a.Type == ValueType.Double && b.Type == ValueType.Double)
+            if (a.IsNumber && b.IsNumber)
             {
                 return new Value(a.AsDouble * b.AsDouble);
             }
-            throw new RuntimeException("Operands must be two numbers.");
+            return new Value();
         }
 
         public static Value operator /(Value a, Value b)
         {
-            if (a.Type == ValueType.Double && b.Type == ValueType.Double)
+            if (a.IsNumber && b.IsNumber)
             {
                 return new Value(a.AsDouble / b.AsDouble);
             }
-            throw new RuntimeException("Operands must be two numbers.");
+            return new Value();
         }
+
+        public static Value operator ==(Value a, Value b)
+        {
+            return new Value(a.Equals(b));
+        }
+        public static Value operator !=(Value a, Value b)
+        {
+            return !(a == b);
+        }
+
+        public static Value operator !(Value val)
+        {
+            bool boolean = val.IsNull || (val.IsBool && val.AsBool == false);
+            return new Value(boolean);
+        }
+
+        public static Value operator >(Value a, Value b)
+        {
+            if(a.IsNumber && b.IsNumber)
+            {
+                return  new Value(a.AsDouble > b.AsDouble); 
+            }
+            return new Value();
+        }
+
+        public static Value operator <(Value a, Value b)
+        {
+            if (a.IsNumber && b.IsNumber)
+            {
+                return new Value(a.AsDouble < b.AsDouble);
+            }
+            return new Value();
+        }
+
     }
 }
