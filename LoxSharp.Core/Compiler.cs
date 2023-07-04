@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace LoxSharp.Core
 {
-    using ParseFunc = Action;
+    using ParseFunc = Action<bool>;
     internal class Compiler
     {
         private enum Precedence
@@ -28,11 +28,11 @@ namespace LoxSharp.Core
 
         private class ParseRule
         {
-            public Action? Prefix { get; private set; } = null;
-            public Action? Infix { get; private set; } = null;
+            public Action<bool>? Prefix { get; private set; } = null;
+            public Action<bool>? Infix { get; private set; } = null;
             public Precedence Precedence { get; private set; } = Precedence.None;
 
-            public ParseRule(Action? prefix, Action? infix, Precedence precedence)
+            public ParseRule(Action<bool>? prefix, Action<bool>? infix, Precedence precedence)
             {
                 Prefix = prefix;
                 Infix = infix;
@@ -109,6 +109,12 @@ namespace LoxSharp.Core
             return chunk;   
         }
 
+        public void Reset()
+        {
+            _tokenIndex = 0;
+            _tokens = null;
+            _compilingChunk = null;
+        }
         private void EndCompiler()
         {
             EmitReturn();
@@ -199,7 +205,7 @@ namespace LoxSharp.Core
 
         #region Parse literal method
 
-        private void Literal()
+        private void Literal(bool canAssign)
         {
             switch(_previous.Type)
             {
@@ -215,27 +221,37 @@ namespace LoxSharp.Core
                 default: return; // Unreachable.
             }
         }
-        private void Number()
+        private void Number(bool canAssign)
         {
             double value = (double)_previous.Literal!;
             EmitConstant(new Value(value));
         }
 
-        private void String()
+        private void String(bool canAssign)
         {
             EmitConstant(new Value((string)_previous.Literal!));
         }
 
-        private void Variable()
+        private void Variable(bool canAssign)
         {
-
+            NamedVariable(_previous, canAssign);
         }
 
-        private void NamedVariable(Token name)
+        private void NamedVariable(Token variable, bool canAssign)
         {
-
+            byte constantIndex = MakeConstant(new Value(variable.Name));
+            
+            if(canAssign && Match(TokenType.EQUAL))
+            {
+                Expression();
+                EmitBytes((byte)OpCode.SET_GLOBAL, constantIndex);
+            }
+            else
+            {
+                EmitBytes((byte)OpCode.GET_GLOBAL, constantIndex);
+            }
         }
-        private void Unary()
+        private void Unary(bool canAssign)
         {
             TokenType operatorType = _previous.Type;
 
@@ -255,7 +271,7 @@ namespace LoxSharp.Core
             }
         }
 
-        private void Binary()
+        private void Binary(bool canAssign)
         {
             TokenType operatorType = _previous.Type;
             ParseRule rule = GetRule(operatorType);
@@ -297,7 +313,7 @@ namespace LoxSharp.Core
             }
         }
 
-        private void Grouping()
+        private void Grouping(bool canAssign)
         {
             Expression();
             Consume(TokenType.RIGHT_PAREN, "Expect ')' after expression.");
@@ -321,7 +337,7 @@ namespace LoxSharp.Core
         {
             Expression();
             Consume(TokenType.SEMICOLON, "Expect ';' after expression.");
-            EmitByte((byte)OpCode.Pop);
+            EmitByte((byte)OpCode.POP);
         }
         private void Statement()
         {
@@ -378,25 +394,30 @@ namespace LoxSharp.Core
                 throw new CompilerException(_previous, "Expect expression.");
             }
 
-            prefixRule();
+            bool canAssign = precedence <= Precedence.Assignment;
+            prefixRule(canAssign);
 
             while(precedence <= GetRule(_current.Type).Precedence) 
             {
                 Advance();
                 ParseFunc infixRule = GetRule(_previous.Type).Infix!;
-                infixRule();
+                infixRule(canAssign);
+            }
+            if(canAssign && Match(TokenType.EQUAL))
+            {
+                throw new CompilerException(_previous, "Invalid assignment target.");
             }
         }
 
         private byte ParseIdentifier(string errorMessage)
         {
             Consume(TokenType.IDENTIFIER, errorMessage);
-            return MakeConstant(new Value((string)_previous.Literal!));
+            return MakeConstant(new Value(_previous.Name));
         }
 
         private void DefineVariable(byte global)
         {
-            EmitBytes((byte)OpCode.Define_Global, global);
+            EmitBytes((byte)OpCode.DEFINE_GLOBAL, global);
         }
         #endregion
     }

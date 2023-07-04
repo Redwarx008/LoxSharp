@@ -25,6 +25,7 @@ namespace LoxSharp.Core
         public void Run(string src)
         {
             _scanner.Reset();
+            _compiler.Reset();
             List<Token> tokens = _scanner.Scan(src);    
             Chunk chunk = _compiler.Compile(tokens);    
             _vm.Interpret(chunk);

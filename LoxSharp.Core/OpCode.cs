@@ -14,9 +14,10 @@ namespace LoxSharp.Core
         TRUE,
         FALSE,
 
-        Pop,
-        Define_Global,
-        Get_Global,
+        POP,
+        DEFINE_GLOBAL,
+        GET_GLOBAL,
+        SET_GLOBAL,
 
         EQUAL,
         GREATER,

@@ -5,6 +5,7 @@ namespace LoxSharp.Demo
 {
     internal class Program
     {
+        private static Interpreter interpreter = new Interpreter();
         static void Main(string[] args)
         {
 
@@ -40,7 +41,6 @@ namespace LoxSharp.Demo
         }
         private static void Run(String source)
         {
-            Interpreter interpreter = new Interpreter();
             interpreter.Run(source);
         }
     }

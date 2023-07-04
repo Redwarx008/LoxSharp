@@ -50,13 +50,42 @@ namespace LoxSharp.Core
                     case OpCode.FALSE:  
                         _stack.Push(new Value(false));  
                         break;
-                    case OpCode.Pop:
+                    case OpCode.POP:
                         _stack.Pop();   
                         break;
-                    case OpCode.Define_Global:
-                        string variableName = ReadConstant().AsString;
-                        _globals[variableName] = _stack.Pop(); 
-                        break;
+                    case OpCode.DEFINE_GLOBAL:
+                        {
+                            string variableName = ReadConstant().AsString;
+                            _globals[variableName] = _stack.Pop();
+                            break;
+                        }
+                    case OpCode.GET_GLOBAL:
+                        {
+                            string variableName = ReadConstant().AsString;
+                            if(!_globals.TryGetValue(variableName, out var value))
+                            {
+                                ThrowRuntimeError($"Undefined variable {variableName}");
+                            }
+                            else
+                            {
+                                _stack.Push(value);
+                            }
+                            break;
+                        }
+                    case OpCode.SET_GLOBAL:
+                        {
+                            string variableName = ReadConstant().AsString;
+                            if(!_globals.ContainsKey(variableName))
+                            {
+                                ThrowRuntimeError($"Undefined variable {variableName}");
+                            }
+                            else
+                            {
+                                _globals[variableName] = _stack.Peek(0);
+                            }
+                            break;
+                        }
+
                     case OpCode.EQUAL:
                     case OpCode.GREATER:
                     case OpCode.LESS:
