@@ -15,6 +15,8 @@ namespace LoxSharp.Core
         FALSE,
 
         POP,
+        GET_LOCAL,
+        SET_LOCAL,
         DEFINE_GLOBAL,
         GET_GLOBAL,
         SET_GLOBAL,

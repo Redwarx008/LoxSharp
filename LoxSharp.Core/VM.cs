@@ -53,6 +53,18 @@ namespace LoxSharp.Core
                     case OpCode.POP:
                         _stack.Pop();   
                         break;
+                    case OpCode.GET_LOCAL:
+                        {
+                            byte slot = ReadByte();
+                            _stack.Push(_stack[slot]);
+                            break;
+                        }
+                    case OpCode.SET_LOCAL:
+                        {
+                            byte slot = ReadByte();
+                            _stack[slot] = _stack.Peek();
+                            break;
+                        }
                     case OpCode.DEFINE_GLOBAL:
                         {
                             string variableName = ReadConstant().AsString;

@@ -14,6 +14,12 @@ namespace LoxSharp.Core.Utility
 
         private int _stackTopIndex = 0; 
 
+        public T this[int i]
+        {
+            get => _values[i];  
+            set => _values[i] = value;  
+        }
+
         public void Push(T value)
         {
             _values[_stackTopIndex] = value;
@@ -26,7 +32,7 @@ namespace LoxSharp.Core.Utility
             return _values[_stackTopIndex];
         }
 
-        public T Peek(int distance)
+        public T Peek(int distance = 0)
         {
             return _values[_stackTopIndex - 1 - distance];
         }
