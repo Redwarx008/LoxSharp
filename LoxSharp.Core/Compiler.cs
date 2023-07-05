@@ -100,7 +100,7 @@ namespace LoxSharp.Core
             _rules[(int)TokenType.IDENTIFIER] = new ParseRule(Variable, null, Precedence.None);
             _rules[(int)TokenType.STRING] = new ParseRule(String, null, Precedence.None);
             _rules[(int)TokenType.NUMBER] = new ParseRule(Number, null, Precedence.None);
-            _rules[(int)TokenType.AND] = new ParseRule(null, null, Precedence.None);
+            _rules[(int)TokenType.AND] = new ParseRule(null, And, Precedence.And);
             _rules[(int)TokenType.CLASS] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.ELSE] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.FALSE] = new ParseRule(Literal, null, Precedence.None);
@@ -108,7 +108,7 @@ namespace LoxSharp.Core
             _rules[(int)TokenType.FUN] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.IF] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.NIL] = new ParseRule(Literal, null, Precedence.None);
-            _rules[(int)TokenType.OR] = new ParseRule(null, null, Precedence.None);
+            _rules[(int)TokenType.OR] = new ParseRule(null, Or, Precedence.Or);
             _rules[(int)TokenType.PRINT] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.RETURN] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.SUPER] = new ParseRule(null, null, Precedence.None);
@@ -169,7 +169,7 @@ namespace LoxSharp.Core
                 _currentSate.LocalVars[_currentSate.LocalVars.Count - 1].Depth > 
                 _currentSate.ScopeDepth)
             {
-                EmitByte((byte)OpCode.POP);
+                EmitBytes((byte)OpCode.POP);
                 _currentSate.LocalVars.RemoveAt(_currentSate.LocalVars.Count - 1);
             }
         }
@@ -220,22 +220,44 @@ namespace LoxSharp.Core
             return true;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void EmitByte(byte b)
-        {
-            CurrentChunk.WriteByte(b, _previousToken.Line);  
-        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void EmitBytes(byte b1, byte b2)
+        private void EmitBytes(params byte[] b)
         {
-            EmitByte(b1);
-            EmitByte(b2);   
+            for(int i = 0; i < b.Length; ++i)
+            {
+                CurrentChunk.WriteByte(b[i], _previousToken.Line);
+            }
+        }
+
+        private int EmitJump(OpCode instruction)
+        {
+            Debug.Assert(_compilingChunk != null);
+
+            EmitBytes((byte)instruction, 0xff, 0xff);
+            return _compilingChunk.Instructions.Count - 1 - 2 + 1;
+        }
+
+        private void EmitLoop(int loopStart)
+        {
+            Debug.Assert(_compilingChunk != null);
+
+            EmitBytes((byte)OpCode.LOOP);
+
+            int offset = _compilingChunk.Instructions.Count - loopStart + 2;
+            if(offset > ushort.MaxValue)
+            {
+                throw new CompilerException(_previousToken, "Loop body too large.");
+            }
+
+            byte high = (byte)((offset >> 8) & 0xff);
+            byte low = (byte)(offset & 0xff);
+            EmitBytes(high, low);
         }
 
         private void EmitReturn()
         {
-            EmitByte((byte)OpCode.RETURN);
+            EmitBytes((byte)OpCode.RETURN);
         }
 
         [MethodImpl(methodImplOptions:MethodImplOptions.AggressiveInlining)]    
@@ -269,13 +291,13 @@ namespace LoxSharp.Core
             switch(_previousToken.Type)
             {
                 case TokenType.FALSE:
-                    EmitByte((byte)OpCode.FALSE);
+                    EmitBytes((byte)OpCode.FALSE);
                     break;
                 case TokenType.TRUE:
-                    EmitByte((byte)OpCode.TRUE);
+                    EmitBytes((byte)OpCode.TRUE);
                     break;
                 case TokenType.NIL:
-                    EmitByte((byte)OpCode.NIL);
+                    EmitBytes((byte)OpCode.NIL);
                     break;
                 default: return; // Unreachable.
             }
@@ -335,10 +357,10 @@ namespace LoxSharp.Core
             switch (operatorType) 
             {
                 case TokenType.BANG:
-                    EmitByte((byte)OpCode.NOT);
+                    EmitBytes((byte)OpCode.NOT);
                     break;
                 case TokenType.MINUS:
-                    EmitByte((byte)OpCode.NEGATE);
+                    EmitBytes((byte)OpCode.NEGATE);
                     break;
                 default:
                     return;// Unreachable.
@@ -357,31 +379,31 @@ namespace LoxSharp.Core
                     EmitBytes((byte)OpCode.EQUAL, (byte)OpCode.NOT);
                     break;
                 case TokenType.EQUAL_EQUAL:
-                    EmitByte((byte)OpCode.EQUAL);
+                    EmitBytes((byte)OpCode.EQUAL);
                     break;
                 case TokenType.GREATER:
-                    EmitByte((byte)OpCode.GREATER);
+                    EmitBytes((byte)OpCode.GREATER);
                     break;
                 case TokenType.GREATER_EQUAL:
                     EmitBytes((byte)OpCode.LESS, (byte)OpCode.NOT);
                     break;
                 case TokenType.LESS:
-                    EmitByte((byte)OpCode.LESS);
+                    EmitBytes((byte)OpCode.LESS);
                     break;
                 case TokenType.LESS_EQUAL:
                     EmitBytes((byte)OpCode.GREATER, (byte)OpCode.NOT);  
                     break;
                 case TokenType.PLUS:
-                    EmitByte((byte)OpCode.ADD);
+                    EmitBytes((byte)OpCode.ADD);
                     break;
                 case TokenType.MINUS:
-                    EmitByte((byte)OpCode.SUBTRACT);
+                    EmitBytes((byte)OpCode.SUBTRACT);
                     break;
                 case TokenType.STAR:
-                    EmitByte((byte)OpCode.MULTIPLY);
+                    EmitBytes((byte)OpCode.MULTIPLY);
                     break;
                 case TokenType.SLASH: 
-                    EmitByte((byte)OpCode.DIVIDE);
+                    EmitBytes((byte)OpCode.DIVIDE);
                     break;
                 default: return; // Unreachable.
             }
@@ -393,6 +415,27 @@ namespace LoxSharp.Core
             Consume(TokenType.RIGHT_PAREN, "Expect ')' after expression.");
         }
 
+        private void And(bool canAssign)
+        {
+            int endJump = EmitJump(OpCode.JUMP_IF_FALSE);
+
+            EmitBytes((byte)OpCode.POP);
+            ParsePrecedence(Precedence.And);
+
+            PatchJump(endJump); 
+        }
+
+        private void Or(bool canAssign) 
+        {
+            int elseJump = EmitJump(OpCode.JUMP_IF_FALSE);
+            int endJump = EmitJump(OpCode.JUMP);
+
+            PatchJump(elseJump);
+            EmitBytes((byte)OpCode.POP);
+
+            ParsePrecedence(Precedence.Or); 
+            PatchJump(endJump); 
+        }
 
         #endregion
 
@@ -420,7 +463,7 @@ namespace LoxSharp.Core
         {
             Expression();
             Consume(TokenType.SEMICOLON, "Expect ';' after expression.");
-            EmitByte((byte)OpCode.POP);
+            EmitBytes((byte)OpCode.POP);
         }
         private void Statement()
         {
@@ -428,7 +471,15 @@ namespace LoxSharp.Core
             {
                 PrintStatement();
             }
-            else if(Match(TokenType.LEFT_BRACE))
+            else if (Match(TokenType.IF))
+            {
+                IfStatement();  
+            }
+            else if (Match(TokenType.WHILE))
+            {
+                WhileStatement();   
+            }
+            else if (Match(TokenType.LEFT_BRACE))
             {
                 BeginScope();
                 Block();
@@ -444,8 +495,104 @@ namespace LoxSharp.Core
         {
             Expression();
             Consume(TokenType.SEMICOLON, "Expect ';' after value.");
-            EmitByte((byte)OpCode.Print);
+            EmitBytes((byte)OpCode.Print);
         }
+
+        private void WhileStatement()
+        {
+            Debug.Assert(_compilingChunk != null);   
+
+            int loopStart = _compilingChunk.Instructions.Count; 
+            Consume(TokenType.LEFT_PAREN, "Expect '(' after 'while'.");
+            Expression();
+            Consume(TokenType.RIGHT_PAREN, "Expect ')' after condition.");
+
+            int exitJump = EmitJump(OpCode.JUMP_IF_FALSE);
+            EmitBytes((byte)OpCode.POP);
+            Statement();
+            EmitLoop(loopStart);
+
+            PatchJump(exitJump);
+            EmitBytes((byte)OpCode.POP);
+        }
+
+        private void ForStatement()
+        {
+            Debug.Assert(_compilingChunk != null);  
+            BeginScope();   
+            Consume(TokenType.LEFT_PAREN, "Expect '(' after 'for'.");
+
+            // First clause.
+            if (Match(TokenType.SEMICOLON))
+            {
+                // No initializer.
+            }
+            else if (Match(TokenType.VAR))
+            {
+                VarDeclaration();
+            }
+            else
+            {
+                ExpressionStatement();
+            }
+
+            int loopStart = _compilingChunk.Instructions.Count;
+            // Second clause.
+            int exitJump = -1;
+            if (!Match(TokenType.SEMICOLON))
+            {
+                Expression();
+                Consume(TokenType.SEMICOLON, "Expect ';' after loop condition.");
+                // Jump out of the loop if the condition is false.
+                exitJump = EmitJump(OpCode.JUMP_IF_FALSE);
+                EmitBytes((byte)OpCode.POP);    
+            }
+
+            // Third clause
+            if (!Match(TokenType.RIGHT_PAREN))
+            {
+                int bodyJump = EmitJump(OpCode.JUMP);
+                int incrementStart = _compilingChunk.Instructions.Count;
+                Expression();   
+                EmitBytes((byte)OpCode.POP);
+                Consume(TokenType.RIGHT_PAREN, "Expect ')' after for clauses.");
+
+                EmitLoop(loopStart);
+                loopStart = incrementStart;
+                PatchJump(bodyJump);
+            }
+
+            Statement();    
+            EmitLoop(loopStart);
+            if (exitJump != -1)
+            {
+                PatchJump(exitJump);    
+                EmitBytes((byte)OpCode.POP);
+            }
+            EndScope(); 
+        }
+
+        private void IfStatement()
+        {
+            Consume(TokenType.LEFT_PAREN, "Expect '(' after 'if'.");
+            Expression();
+            Consume(TokenType.RIGHT_PAREN, "Expect ')' after condition.");
+
+            int thenJump = EmitJump(OpCode.JUMP_IF_FALSE);
+            EmitBytes((byte)OpCode.POP);
+            Statement();
+
+            int elseJump = EmitJump(OpCode.JUMP);
+            PatchJump(thenJump);    
+
+            EmitBytes((byte)OpCode.POP);    
+            if (Match(TokenType.ELSE))
+            {
+                Statement();    
+            }
+            PatchJump(elseJump);    
+        }
+
         private void Declaration()
         {
             if (Match(TokenType.VAR))
@@ -468,7 +615,7 @@ namespace LoxSharp.Core
             }
             else
             {
-                EmitByte((byte)OpCode.NIL);
+                EmitBytes((byte)OpCode.NIL);
             }
             Consume(TokenType.SEMICOLON, "Expect ';' after variable declaration.");
             DefineVariable(global); 
@@ -592,6 +739,21 @@ namespace LoxSharp.Core
             return -1;
         }
 
+        private void PatchJump(int offset)
+        {
+            Debug.Assert(_compilingChunk != null);
+
+            // -2 to adjust for the bytecode for the jump offset itself.
+            int jump = _compilingChunk.Instructions.Count - offset - 2;
+
+            if(jump > UInt16.MaxValue)
+            {
+                throw new CompilerException(_previousToken, "Too much code to jump over.");
+            }
+
+            _compilingChunk.Instructions[offset] = (byte)((jump >> 8) & 0xff);
+            _compilingChunk.Instructions[offset + 1] = (byte)(jump & 0xff);
+        }
         #endregion
     }
 }

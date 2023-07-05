@@ -120,6 +120,27 @@ namespace LoxSharp.Core
                     case OpCode.Print:
                         Console.WriteLine(_stack.Pop().ToString());
                         break;
+                    case OpCode.JUMP:
+                        {
+                            ushort offset = ReadUShort();
+                            _ip += offset;
+                            break;
+                        }
+                    case OpCode.JUMP_IF_FALSE:
+                        {
+                            ushort offset = ReadUShort();
+                            if(!_stack.Peek().AsBool)
+                            {
+                                _ip += offset;
+                            }
+                            break;
+                        }
+                    case OpCode.LOOP:
+                        {
+                            ushort offset = ReadUShort();
+                            _ip -= offset;  
+                            break;
+                        }
                     case OpCode.RETURN:
                         return InterpretResult.OK;
                 }
@@ -131,6 +152,14 @@ namespace LoxSharp.Core
         private byte ReadByte()
         {
             return _currentChunk.Instructions[_ip++];
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]  
+        private ushort ReadUShort() 
+        {
+            var high = _currentChunk.Instructions[_ip++];    
+            var low = _currentChunk.Instructions[_ip++];    
+            return (ushort)(high << 8 | low);   
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]  
