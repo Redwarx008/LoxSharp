@@ -1,4 +1,5 @@
-﻿using System;
+﻿using LoxSharp.Core.Utility;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -22,6 +23,18 @@ namespace LoxSharp.Core
             {
                 offset = DisassembleInstruction(chunk, offset);
             }
+        }
+
+        public void DisassembleStack(StackList<Value> stack)
+        {
+            _sb.Append("          ");
+            _sb.Append("{ ");
+            for(int i = 0; i < stack.Count; ++i)
+            {
+                _sb.Append($"[{stack[i]}]");
+            }
+            _sb.Append(" }");
+            _sb.Append('\n');
         }
 
         public int DisassembleInstruction(Chunk chunk, int offset)
@@ -57,7 +70,7 @@ namespace LoxSharp.Core
                 case OpCode.DIVIDE:
                 case OpCode.NOT:
                 case OpCode.NEGATE:
-                case OpCode.Print:
+                case OpCode.PRINT:
                 case OpCode.RETURN:
                     return SimpleInstruction(instruction, offset);
                 case OpCode.GET_LOCAL:
@@ -81,7 +94,7 @@ namespace LoxSharp.Core
         private int ConstantInstruction(OpCode instruction, Chunk chunk, int offset)
         {
             byte constant = chunk.Instructions[offset + 1];
-            _sb.Append($"{instruction.ToString(),-16}{constant, 4}");
+            _sb.Append($"{instruction.ToString(), -16}{constant, 4}");
             _sb.Append($"{chunk.Constants[constant].ToString(), 6}");
             _sb.Append('\n');
             return offset + 2;  
@@ -107,7 +120,7 @@ namespace LoxSharp.Core
             var low = chunk.Instructions[offset + 2];
             ushort jump = (ushort)(high | low);
 
-            _sb.Append($"{instruction.ToString(),-16}{offset,4} -> {offset + 3 + direction * jump}\n");
+            _sb.Append($"{instruction.ToString(), -16}{offset, 4} -> {offset + 3 + direction * jump}\n");
             return offset + 3;
         }
     }

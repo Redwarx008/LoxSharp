@@ -14,6 +14,8 @@ namespace LoxSharp.Core.Utility
 
         private int _stackTopIndex = 0; 
 
+        public int Count => _stackTopIndex;
+
         public T this[int i]
         {
             get => _values[i];  

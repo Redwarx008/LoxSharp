@@ -27,17 +27,11 @@ namespace LoxSharp.Core
             _compiler.Reset();
             List<Token> tokens = _scanner.Scan(src);    
             Chunk chunk = _compiler.Compile(tokens);    
-            try
-            {
-                _vm.Interpret(chunk);
-            }
-            catch(RuntimeException e) 
-            {
-                Console.WriteLine(e.ToString());    
-            }
-            catch (Exception e) { }
+            _vm.Interpret(chunk, _disassembler);
+#if DEBUG
             _disassembler.DisassembleChunk(chunk, "instructions");
-            Console.Write(_disassembler.GetText()); 
+            Console.Write(_disassembler.GetText());
+#endif
         }
 
     }

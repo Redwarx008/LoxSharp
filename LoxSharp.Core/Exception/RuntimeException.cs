@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace LoxSharp.Core
 {
-    internal class RuntimeException : Exception
+    public class RuntimeException : Exception
     {
         public RuntimeException(string message)
             :base(message)

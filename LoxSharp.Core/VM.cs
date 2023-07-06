@@ -6,7 +6,6 @@ using System.Text;
 using System.Threading.Tasks;
 using LoxSharp.Core.Utility;
 
-
 namespace LoxSharp.Core
 {
     using Table = Dictionary<string, Value>;
@@ -24,17 +23,25 @@ namespace LoxSharp.Core
         private int _ip = 0;
         private StackList<Value> _stack = new();
         private Table _globals = new();
-        public InterpretResult Interpret(Chunk chunk)
+        public InterpretResult Interpret(Chunk chunk, Disassembler? disassembler = null)
         {
             _currentChunk = chunk;
-            return Run();
+            return Run(disassembler);
         }
 
-        private InterpretResult Run()
+        private InterpretResult Run(Disassembler? disassembler = null)
         {
             while(true)
             {
+#if DEBUG
+                if (disassembler != null)
+                {
+                    disassembler.DisassembleStack(_stack);
+                    disassembler.DisassembleInstruction(_currentChunk, _ip);
+                }
+#endif
                 OpCode instruction = (OpCode)ReadByte();
+
                 switch (instruction) 
                 {
                     case OpCode.CONSTANT:
@@ -117,7 +124,7 @@ namespace LoxSharp.Core
                         }
                         _stack.Push(new Value(-_stack.Pop().AsDouble));
                         break;
-                    case OpCode.Print:
+                    case OpCode.PRINT:
                         Console.WriteLine(_stack.Pop().ToString());
                         break;
                     case OpCode.JUMP:

@@ -41,7 +41,22 @@ namespace LoxSharp.Demo
         }
         private static void Run(String source)
         {
-            interpreter.Run(source);
+            try
+            {
+                interpreter.Run(source);
+            }
+            catch(ScannerException e)
+            {
+                Console.WriteLine(e.Message);
+            }
+            catch(CompilerException e)
+            {
+                Console.WriteLine(e.Message);
+            }
+            catch(RuntimeException e)
+            {
+                Console.WriteLine(e.Message);
+            }
         }
     }
 }

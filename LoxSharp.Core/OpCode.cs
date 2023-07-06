@@ -33,7 +33,7 @@ namespace LoxSharp.Core
 
         NEGATE,
 
-        Print,
+        PRINT,
         JUMP_IF_FALSE,
         JUMP,
         LOOP,
