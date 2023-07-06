@@ -12,14 +12,13 @@ namespace LoxSharp.Core
         private Scanner _scanner;
         private Compiler _compiler;
         private VM _vm;
-
-        private bool _hadError = false; 
-
+        private Disassembler _disassembler;
         public Interpreter() 
         {
             _scanner = new Scanner();
             _compiler = new Compiler();
             _vm = new VM();
+            _disassembler = new Disassembler();
         }
 
         public void Run(string src)
@@ -28,7 +27,17 @@ namespace LoxSharp.Core
             _compiler.Reset();
             List<Token> tokens = _scanner.Scan(src);    
             Chunk chunk = _compiler.Compile(tokens);    
-            _vm.Interpret(chunk);
+            try
+            {
+                _vm.Interpret(chunk);
+            }
+            catch(RuntimeException e) 
+            {
+                Console.WriteLine(e.ToString());    
+            }
+            catch (Exception e) { }
+            _disassembler.DisassembleChunk(chunk, "instructions");
+            Console.Write(_disassembler.GetText()); 
         }
 
     }

@@ -54,12 +54,20 @@ namespace LoxSharp.Core
 
         private class CompilerState
         {
+            internal class LoopState
+            {
+                public int LoopStart { get; set; } = 0;
+                public int ScopeDepth { get; set; } = 0;
+                public List<int> ExitJumpStarts { get; set; } = new();
+            }
             public List<LocalVariabal> LocalVars { get; private set; }
-            public int ScopeDepth { get; set; }
+            public Stack<LoopState> LoopStates { get; private set; } 
+            public int ScopeDepth { get; set; } = 0;
 
             public CompilerState()
             {
-                LocalVars = new (16);
+                LocalVars = new List<LocalVariabal>(16);
+                LoopStates = new Stack<LoopState>();
             }
         }
 
@@ -236,6 +244,16 @@ namespace LoxSharp.Core
 
             EmitBytes((byte)instruction, 0xff, 0xff);
             return _compilingChunk.Instructions.Count - 1 - 2 + 1;
+        }
+
+        private void PatchLoopExitJumps(CompilerState.LoopState loopState)
+        {
+            Debug.Assert(_currentSate != null);
+
+            for(int i = 0; i < loopState.ExitJumpStarts.Count; ++i)
+            {
+                PatchJump(loopState.ExitJumpStarts[i]);
+            }
         }
 
         private void EmitLoop(int loopStart)
@@ -479,11 +497,23 @@ namespace LoxSharp.Core
             {
                 WhileStatement();   
             }
+            else if (Match(TokenType.FOR))
+            {
+                ForStatement(); 
+            }
             else if (Match(TokenType.LEFT_BRACE))
             {
                 BeginScope();
                 Block();
                 EndScope();
+            }
+            else if (Match(TokenType.CONTINUE))
+            {
+                ContinueStatement();
+            }
+            else if(Match(TokenType.BREAK))
+            {
+                BreakStatement();
             }
             else
             {
@@ -498,27 +528,90 @@ namespace LoxSharp.Core
             EmitBytes((byte)OpCode.Print);
         }
 
+        private void ContinueStatement()
+        {
+            Debug.Assert(_currentSate != null);
+
+            if(_currentSate.LoopStates.Count == 0)
+            {
+                throw new CompilerException(_previousToken, "Can't use 'continue' outside of a loop.");
+            }
+
+            Consume(TokenType.SEMICOLON, "Expect ';' after 'continue'.");
+
+            // Discard any locals created inside the loop.
+            for (int i = _currentSate.LocalVars.Count - 1;
+                i >= 0 && _currentSate.LocalVars[i].Depth > _currentSate.LoopStates.Peek().ScopeDepth;
+                --i)
+            {
+                EmitBytes((byte)OpCode.POP);
+                _currentSate.LocalVars.RemoveAt(i);
+            }
+
+            // Jump to top of current innermost loop.
+            EmitLoop(_currentSate.LoopStates.Peek().LoopStart);
+        }
+
+        private void BreakStatement()
+        {
+            Debug.Assert(_currentSate != null);
+
+            if (_currentSate.LoopStates.Count == 0)
+            {
+                throw new CompilerException(_previousToken, "Can't use 'continue' outside of a loop.");
+            }
+
+            Consume(TokenType.SEMICOLON, "Expect ';' after 'break'.");
+
+            // Discard any locals created inside the loop.
+            for (int i = _currentSate.LocalVars.Count - 1;
+                i >= 0 && _currentSate.LocalVars[i].Depth >= _currentSate.LoopStates.Peek().ScopeDepth;
+                --i)
+            {
+                EmitBytes((byte)OpCode.POP);
+                _currentSate.LocalVars.RemoveAt(i);
+            }
+
+
+            int exitJumpStart = EmitJump(OpCode.JUMP);
+            _currentSate.LoopStates.Peek().ExitJumpStarts.Add(exitJumpStart);    
+        }
+
         private void WhileStatement()
         {
             Debug.Assert(_compilingChunk != null);   
+            Debug.Assert(_currentSate != null);
 
-            int loopStart = _compilingChunk.Instructions.Count; 
+            CompilerState.LoopState loopState = new()
+            {
+                LoopStart = _compilingChunk.Instructions.Count,
+                ScopeDepth = _currentSate.ScopeDepth + 1
+            };
+            _currentSate.LoopStates.Push(loopState); 
+
             Consume(TokenType.LEFT_PAREN, "Expect '(' after 'while'.");
             Expression();
             Consume(TokenType.RIGHT_PAREN, "Expect ')' after condition.");
 
-            int exitJump = EmitJump(OpCode.JUMP_IF_FALSE);
+            int exitJumpStart = EmitJump(OpCode.JUMP_IF_FALSE);
+            _currentSate.LoopStates.Peek().ExitJumpStarts.Add(exitJumpStart);
+
             EmitBytes((byte)OpCode.POP);
             Statement();
-            EmitLoop(loopStart);
+            EmitLoop(_currentSate.LoopStates.Peek().LoopStart);
 
-            PatchJump(exitJump);
+            PatchLoopExitJumps(loopState);
+
             EmitBytes((byte)OpCode.POP);
+
+            _currentSate.LoopStates.Pop();
         }
 
         private void ForStatement()
         {
             Debug.Assert(_compilingChunk != null);  
+            Debug.Assert(_currentSate != null);
+
             BeginScope();   
             Consume(TokenType.LEFT_PAREN, "Expect '(' after 'for'.");
 
@@ -536,7 +629,13 @@ namespace LoxSharp.Core
                 ExpressionStatement();
             }
 
-            int loopStart = _compilingChunk.Instructions.Count;
+            CompilerState.LoopState loopState = new()
+            {
+                LoopStart = _compilingChunk.Instructions.Count,
+                ScopeDepth = _currentSate.ScopeDepth
+            };
+            _currentSate.LoopStates.Push(loopState);
+
             // Second clause.
             int exitJump = -1;
             if (!Match(TokenType.SEMICOLON))
@@ -545,6 +644,8 @@ namespace LoxSharp.Core
                 Consume(TokenType.SEMICOLON, "Expect ';' after loop condition.");
                 // Jump out of the loop if the condition is false.
                 exitJump = EmitJump(OpCode.JUMP_IF_FALSE);
+                _currentSate.LoopStates.Peek().ExitJumpStarts.Add(exitJump); 
+
                 EmitBytes((byte)OpCode.POP);    
             }
 
@@ -557,18 +658,20 @@ namespace LoxSharp.Core
                 EmitBytes((byte)OpCode.POP);
                 Consume(TokenType.RIGHT_PAREN, "Expect ')' after for clauses.");
 
-                EmitLoop(loopStart);
-                loopStart = incrementStart;
+                EmitLoop(_currentSate.LoopStates.Peek().LoopStart);
+                _currentSate.LoopStates.Peek().LoopStart = incrementStart;
                 PatchJump(bodyJump);
             }
 
             Statement();    
-            EmitLoop(loopStart);
+            EmitLoop(_currentSate.LoopStates.Peek().LoopStart);
+            PatchLoopExitJumps(loopState);
             if (exitJump != -1)
             {
-                PatchJump(exitJump);    
                 EmitBytes((byte)OpCode.POP);
             }
+
+            _currentSate.LoopStates.Pop();  
             EndScope(); 
         }
 

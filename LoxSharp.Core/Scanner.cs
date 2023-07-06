@@ -38,6 +38,8 @@ namespace LoxSharp.Core
             _keyWords["true"] = TokenType.TRUE;
             _keyWords["var"] = TokenType.VAR;
             _keyWords["while"] = TokenType.WHILE;
+            _keyWords["continue"] = TokenType.CONTINUE;
+            _keyWords["break"] = TokenType.BREAK;
         }
 
         public Scanner()
