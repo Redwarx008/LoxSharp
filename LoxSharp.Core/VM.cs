@@ -16,36 +16,55 @@ namespace LoxSharp.Core
         RUNTIME_ERROR,
     }
     
+    internal struct CallFrame
+    {
+        public Function Function { get; private set; }
+        public int Ip { get; set; } = 0;
+        public int StackStart { get; private set; }
+
+        public CallFrame(Function function, int stackStart)
+        {
+            Function = function;
+            StackStart = stackStart;
+        }
+    }
+
     internal class VM
     {
+        private static int STACK_MAX = 256;
+        private static int FRAME_MAX = 64;
 
-        private Chunk _currentChunk = null!;
-        private int _ip = 0;
-        private StackList<Value> _stack = new();
+        private ValueStack<CallFrame> _callFrames = new(FRAME_MAX);
+        private ValueStack<Value> _stack = new(FRAME_MAX * STACK_MAX);
         private Table _globals = new();
-        public InterpretResult Interpret(Chunk chunk, Disassembler? disassembler = null)
+        public InterpretResult Interpret(Function function, Disassembler? disassembler = null)
         {
-            _currentChunk = chunk;
+            _stack.Push(new Value(function));
+
+            CallFrame callframe = new(function, 0);
+            _callFrames.Push(callframe);
+
             return Run(disassembler);
         }
 
         private InterpretResult Run(Disassembler? disassembler = null)
         {
+            ref CallFrame frame = ref _callFrames.Peek();
             while(true)
             {
 #if DEBUG
                 if (disassembler != null)
                 {
                     disassembler.DisassembleStack(_stack);
-                    disassembler.DisassembleInstruction(_currentChunk, _ip);
+                    disassembler.DisassembleInstruction(frame.Function.Chunk, frame.Ip);
                 }
 #endif
-                OpCode instruction = (OpCode)ReadByte();
+                OpCode instruction = (OpCode)ReadByte(ref frame);
 
                 switch (instruction) 
                 {
                     case OpCode.CONSTANT:
-                        Value constant = ReadConstant();
+                        Value constant = ReadConstant(ref frame);
                         _stack.Push(constant);  
                         break;
                     case OpCode.NIL:
@@ -62,25 +81,25 @@ namespace LoxSharp.Core
                         break;
                     case OpCode.GET_LOCAL:
                         {
-                            byte slot = ReadByte();
+                            byte slot = ReadByte(ref frame);
                             _stack.Push(_stack[slot]);
                             break;
                         }
                     case OpCode.SET_LOCAL:
                         {
-                            byte slot = ReadByte();
+                            byte slot = ReadByte(ref frame);
                             _stack[slot] = _stack.Peek();
                             break;
                         }
                     case OpCode.DEFINE_GLOBAL:
                         {
-                            string variableName = ReadConstant().AsString;
+                            string variableName = ReadConstant(ref frame).AsString;
                             _globals[variableName] = _stack.Pop();
                             break;
                         }
                     case OpCode.GET_GLOBAL:
                         {
-                            string variableName = ReadConstant().AsString;
+                            string variableName = ReadConstant(ref frame).AsString;
                             if(!_globals.TryGetValue(variableName, out var value))
                             {
                                 ThrowRuntimeError($"Undefined variable {variableName}");
@@ -93,7 +112,7 @@ namespace LoxSharp.Core
                         }
                     case OpCode.SET_GLOBAL:
                         {
-                            string variableName = ReadConstant().AsString;
+                            string variableName = ReadConstant(ref frame).AsString;
                             if(!_globals.ContainsKey(variableName))
                             {
                                 ThrowRuntimeError($"Undefined variable {variableName}");
@@ -129,23 +148,23 @@ namespace LoxSharp.Core
                         break;
                     case OpCode.JUMP:
                         {
-                            ushort offset = ReadUShort();
-                            _ip += offset;
+                            ushort offset = ReadUShort(ref frame);
+                            frame.Ip += offset;
                             break;
                         }
                     case OpCode.JUMP_IF_FALSE:
                         {
-                            ushort offset = ReadUShort();
+                            ushort offset = ReadUShort(ref frame);
                             if(!_stack.Peek().AsBool)
                             {
-                                _ip += offset;
+                                frame.Ip += offset;
                             }
                             break;
                         }
                     case OpCode.LOOP:
                         {
-                            ushort offset = ReadUShort();
-                            _ip -= offset;  
+                            ushort offset = ReadUShort(ref frame);
+                            frame.Ip -= offset;  
                             break;
                         }
                     case OpCode.RETURN:
@@ -156,23 +175,23 @@ namespace LoxSharp.Core
 
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]  
-        private byte ReadByte()
+        private byte ReadByte(ref CallFrame callFrame)
         {
-            return _currentChunk.Instructions[_ip++];
+            return callFrame.Function.Chunk.Instructions[callFrame.Ip++];
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]  
-        private ushort ReadUShort() 
+        private ushort ReadUShort(ref CallFrame callFrame) 
         {
-            var high = _currentChunk.Instructions[_ip++];    
-            var low = _currentChunk.Instructions[_ip++];    
+            var high = callFrame.Function.Chunk.Instructions[callFrame.Ip++];    
+            var low = callFrame.Function.Chunk.Instructions[callFrame.Ip++];    
             return (ushort)(high << 8 | low);   
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]  
-        private Value ReadConstant()
+        private Value ReadConstant(ref CallFrame callFrame)
         {
-            return _currentChunk.Constants[ReadByte()];
+            return callFrame.Function.Chunk.Constants[ReadByte(ref callFrame)];
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -241,7 +260,8 @@ namespace LoxSharp.Core
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void ThrowRuntimeError(string message)
         {
-            int line = _currentChunk.LineNumbers[_ip];
+            ref readonly CallFrame callFrame = ref _callFrames.Peek();
+            int line = callFrame.Function.Chunk.LineNumbers[callFrame.Ip];
             throw new RuntimeException($"[Line {line}] {message}");    
         }
     }

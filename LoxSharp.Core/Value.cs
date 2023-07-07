@@ -1,4 +1,5 @@
-﻿using System;
+﻿using LoxSharp.Core.Utility;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -22,6 +23,7 @@ namespace LoxSharp.Core
             Bool,
             Double,
             String,
+            Function,
         }
 
         [StructLayout(LayoutKind.Explicit)]
@@ -57,11 +59,20 @@ namespace LoxSharp.Core
                 return (string)_obj!;
             }
         }
+        public readonly Function AsFunction
+        {
+            get
+            {
+                Debug.Assert(IsFunction);
+                return (Function)_obj!;
+            }
+        }
 
         public readonly bool IsNull => _type == ValueType.Null;
         public readonly bool IsBool => _type == ValueType.Bool;
         public readonly bool IsNumber => _type == ValueType.Double;
         public readonly bool IsString => _type == ValueType.String;  
+        public readonly bool IsFunction => _type == ValueType.Function; 
 
         public Value(double val)
         {
@@ -86,6 +97,13 @@ namespace LoxSharp.Core
             _data = default;
             _type = ValueType.String;
             _obj = val; 
+        }
+
+        public Value(Function val)
+        {
+            _data = default;
+            _type = ValueType.Function;
+            _obj = val;
         }
 
         public Value()
@@ -151,6 +169,8 @@ namespace LoxSharp.Core
                     return AsDouble.ToString();
                 case ValueType.String:
                     return AsString;
+                case ValueType.Function:
+                    return AsFunction.ToString();   
                 default:
                     return "type not implemented";
             }

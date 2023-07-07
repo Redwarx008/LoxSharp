@@ -1,4 +1,5 @@
-﻿using System;
+﻿using LoxSharp.Core.Utility;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -26,10 +27,10 @@ namespace LoxSharp.Core
             _scanner.Reset();
             _compiler.Reset();
             List<Token> tokens = _scanner.Scan(src);    
-            Chunk chunk = _compiler.Compile(tokens);    
-            _vm.Interpret(chunk, _disassembler);
+            Function function = _compiler.Compile(tokens);    
+            _vm.Interpret(function, _disassembler);
 #if DEBUG
-            _disassembler.DisassembleChunk(chunk, "instructions");
+            _disassembler.DisassembleChunk(function.Chunk, function.ToString());
             Console.Write(_disassembler.GetText());
 #endif
         }

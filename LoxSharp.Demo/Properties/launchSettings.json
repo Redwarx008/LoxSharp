@@ -2,7 +2,7 @@
   "profiles": {
     "LoxSharp.Demo": {
       "commandName": "Project",
-      "commandLineArgs": "forloop.lox\r\n",
+      "commandLineArgs": "whileloop.lox\r\n",
       "workingDirectory": "."
     }
   }

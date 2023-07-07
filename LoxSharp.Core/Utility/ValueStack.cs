@@ -1,25 +1,28 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection.Emit;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace LoxSharp.Core.Utility
 {
-    internal class StackList<T>
+    internal class ValueStack<T> where T : struct
     {
-        private static int STACK_MAX = 256;
-
-        private T[] _values = new T[STACK_MAX];
+        private T[] _values;
 
         private int _stackTopIndex = 0; 
 
+        public ValueStack(int capacity) 
+        {
+            _values = new T[capacity];  
+        }
+
         public int Count => _stackTopIndex;
 
-        public T this[int i]
+        public ref T this[int i]
         {
-            get => _values[i];  
-            set => _values[i] = value;  
+            get => ref _values[i];  
         }
 
         public void Push(T value)
@@ -34,9 +37,10 @@ namespace LoxSharp.Core.Utility
             return _values[_stackTopIndex];
         }
 
-        public T Peek(int distance = 0)
+        public ref T Peek(int distance = 0)
         {
-            return _values[_stackTopIndex - 1 - distance];
+            return ref _values[_stackTopIndex - 1 - distance];
         }
+
     }
 }

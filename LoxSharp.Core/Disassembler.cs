@@ -25,15 +25,13 @@ namespace LoxSharp.Core
             }
         }
 
-        public void DisassembleStack(StackList<Value> stack)
+        public void DisassembleStack(ValueStack<Value> stack)
         {
             _sb.Append("          ");
-            _sb.Append("{ ");
             for(int i = 0; i < stack.Count; ++i)
             {
                 _sb.Append($"[{stack[i]}]");
             }
-            _sb.Append(" }");
             _sb.Append('\n');
         }
 
