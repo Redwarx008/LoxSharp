@@ -68,6 +68,8 @@ namespace LoxSharp.Core
             }
         }
 
+        public readonly ValueType Type => _type;
+
         public readonly bool IsNull => _type == ValueType.Null;
         public readonly bool IsBool => _type == ValueType.Bool;
         public readonly bool IsNumber => _type == ValueType.Double;
@@ -168,7 +170,7 @@ namespace LoxSharp.Core
                 case ValueType.Double:
                     return AsDouble.ToString();
                 case ValueType.String:
-                    return AsString;
+                    return $"'{AsString}'";
                 case ValueType.Function:
                     return AsFunction.ToString();   
                 default:

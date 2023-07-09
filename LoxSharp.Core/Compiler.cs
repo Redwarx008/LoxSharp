@@ -104,7 +104,7 @@ namespace LoxSharp.Core
 
             _rules = new ParseRule[Enum.GetValues(typeof(TokenType)).Length];
             
-            _rules[(int)TokenType.LEFT_PAREN] = new ParseRule(Grouping, null, Precedence.None);
+            _rules[(int)TokenType.LEFT_PAREN] = new ParseRule(Grouping, Call, Precedence.Call);
             _rules[(int)TokenType.RIGHT_PAREN] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.LEFT_BRACE] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.RIGHT_BRACE] = new ParseRule(null, null, Precedence.None);
@@ -157,8 +157,8 @@ namespace LoxSharp.Core
                 Declaration();
             }
 
-            EndCompilerState();
-            return CurrentState.Function;   
+            Function topFunction = EndCompilerState();
+            return topFunction;   
         }
 
         public void Reset()
@@ -192,13 +192,24 @@ namespace LoxSharp.Core
         private void BeginCompilerState(FunctionType functionType)
         {
             CompilerState compilerState = new(functionType);
+            if(functionType != FunctionType.Script)
+            {
+                compilerState.Function.Name = _previousToken.Name;
+            }
+            
             _compilerStates.Push(compilerState);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]  
-        private void EndCompilerState()
+        private Function EndCompilerState()
         {
+#if DEBUG
+            Disassembler disassembler = Disassembler.Instance;
+            disassembler.DisassembleChunk(_compilerStates.Peek().Function.Chunk, CurrentState.Function.Name ?? "Main");
+            Console.Write(disassembler.GetText());
+#endif
             EmitReturn();
+            return _compilerStates.Pop().Function;
         }
 
         #region utility method
@@ -284,6 +295,7 @@ namespace LoxSharp.Core
 
         private void EmitReturn()
         {
+            EmitBytes((byte)OpCode.NIL);
             EmitBytes((byte)OpCode.RETURN);
         }
 
@@ -435,6 +447,12 @@ namespace LoxSharp.Core
             }
         }
 
+        private void Call(bool canAssgin)
+        {
+            byte argCount = ParseCallArgumentList();
+            EmitBytes((byte)OpCode.CALL, argCount);
+        }
+
         private void Grouping(bool canAssign)
         {
             Expression();
@@ -519,6 +537,10 @@ namespace LoxSharp.Core
             {
                 ContinueStatement();
             }
+            else if (Match(TokenType.RETURN))
+            {
+                ReturnStatement();
+            }
             else if(Match(TokenType.BREAK))
             {
                 BreakStatement();
@@ -536,6 +558,25 @@ namespace LoxSharp.Core
             EmitBytes((byte)OpCode.PRINT);
         }
 
+        private void ReturnStatement()
+        {
+            if (CurrentState.FunctionType == FunctionType.Script)
+            {
+                throw new CompilerException(_previousToken, "Can't return from top-level code.");
+            }
+
+            if (Match(TokenType.SEMICOLON))
+            {
+                EmitReturn();
+            }
+            else
+            {
+                Expression();
+                Consume(TokenType.SEMICOLON, "Expect ';' after return value.");
+                EmitBytes((byte)OpCode.RETURN);
+            }
+        }
+
         private void ContinueStatement()
         {
             if(CurrentState.LoopStates.Count == 0)
@@ -551,7 +592,6 @@ namespace LoxSharp.Core
                 --i)
             {
                 EmitBytes((byte)OpCode.POP);
-                CurrentState.LocalVars.RemoveAt(i);
             }
 
             // Jump to top of current innermost loop.
@@ -573,7 +613,6 @@ namespace LoxSharp.Core
                 --i)
             {
                 EmitBytes((byte)OpCode.POP);
-                CurrentState.LocalVars.RemoveAt(i);
             }
 
 
@@ -789,13 +828,47 @@ namespace LoxSharp.Core
             BeginScope();
 
             Consume(TokenType.LEFT_PAREN, "Expect '(' after function name.");
+
+            if (!Check(TokenType.RIGHT_PAREN))
+            {
+                do
+                {
+                    ++CurrentState.Function.Arity;
+                    if (CurrentState.Function.Arity > Byte.MaxValue)
+                    {
+                        throw new CompilerException(_previousToken, "Can't have more than 255 parameters.");
+                    }
+                    byte constantIndex = ParseVariable("Expect parameter name.");
+                    DefineVariable(constantIndex);
+                } while (Match(TokenType.COMMA));
+            }
+
             Consume(TokenType.RIGHT_PAREN, "Expect ')' after parameters.");
             Consume(TokenType.LEFT_BRACE, "Expect '{' before function body.");
 
             Block();
 
-            EndCompilerState();
-            EmitConstant(new Value(CurrentState.Function));
+            Function currentFunc = EndCompilerState();
+            EmitConstant(new Value(currentFunc));
+        }
+
+        private byte ParseCallArgumentList()
+        {
+            byte argCount = 0;
+            if( !Check(TokenType.RIGHT_PAREN))
+            {
+                do
+                {
+                    Expression();
+                    if (argCount > Byte.MaxValue)
+                    {
+                        throw new CompilerException(_previousToken, "Can't have more than 255 arguments.");
+                    }
+                    ++argCount;
+                } while(Match(TokenType.COMMA)); 
+            }
+            Consume(TokenType.RIGHT_PAREN, "Expect ')' after arguments.");
+            return argCount;
         }
 
         private void DefineVariable(byte global)

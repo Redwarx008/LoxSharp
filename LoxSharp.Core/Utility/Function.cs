@@ -8,9 +8,9 @@ namespace LoxSharp.Core.Utility
 {
     internal class Function
     {
-        public int Arity { get; private set; }
+        public int Arity { get; set; }
         public Chunk Chunk { get; private set; }
-        public string? Name { get; private set; }
+        public string? Name { get; set; }
 
         public Function() 
         {
@@ -24,7 +24,7 @@ namespace LoxSharp.Core.Utility
                 return "<Main>";
             }
 
-            return $"<Function {Name}>";
+            return $"<Fn {Name}>";
         }
     }
 }

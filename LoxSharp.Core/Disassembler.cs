@@ -9,15 +9,26 @@ namespace LoxSharp.Core
 {
     internal class Disassembler
     {
+        public static Disassembler Instance => _disassembler;
+
+        private static Disassembler _disassembler = new(); 
         private StringBuilder _sb = new();
+
+        private Disassembler()
+        {
+
+        }
 
         public string GetText()
         {
-            return _sb.ToString();  
+            string txt = _sb.ToString();
+            _sb.Clear();
+            return txt;  
         }
 
         public void DisassembleChunk(Chunk chunk, string name)
         {
+            _sb.Clear();    
             _sb.Append($"== {name} ==\n");
             for(int offset = 0; offset < chunk.Instructions.Count;)
             {
@@ -73,6 +84,7 @@ namespace LoxSharp.Core
                     return SimpleInstruction(instruction, offset);
                 case OpCode.GET_LOCAL:
                 case OpCode.SET_LOCAL:
+                case OpCode.CALL:
                     return ByteInstruction(instruction, chunk, offset);
                 case OpCode.GET_GLOBAL:
                 case OpCode.SET_GLOBAL:
@@ -93,7 +105,7 @@ namespace LoxSharp.Core
         {
             byte constant = chunk.Instructions[offset + 1];
             _sb.Append($"{instruction.ToString(), -16}{constant, 4}");
-            _sb.Append($"{chunk.Constants[constant].ToString(), 6}");
+            _sb.Append($"{chunk.Constants[constant].ToString(), 10}");
             _sb.Append('\n');
             return offset + 2;  
         }

@@ -37,6 +37,7 @@ namespace LoxSharp.Core
         JUMP_IF_FALSE,
         JUMP,
         LOOP,
+        CALL,   
         RETURN
     }
 }

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection.Emit;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -25,21 +26,30 @@ namespace LoxSharp.Core.Utility
             get => ref _values[i];  
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Push(T value)
         {
             _values[_stackTopIndex] = value;
             ++_stackTopIndex;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public T Pop() 
         {
             --_stackTopIndex;
             return _values[_stackTopIndex];
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ref T Peek(int distance = 0)
         {
             return ref _values[_stackTopIndex - 1 - distance];
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void Discard(int count)
+        {
+            _stackTopIndex -= count;
         }
 
     }

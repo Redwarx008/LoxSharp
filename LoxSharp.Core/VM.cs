@@ -31,32 +31,36 @@ namespace LoxSharp.Core
 
     internal class VM
     {
-        private static int STACK_MAX = 256;
-        private static int FRAME_MAX = 64;
+        private const int STACK_MAX = 256;
+        private const int FRAME_MAX = 64;
 
         private ValueStack<CallFrame> _callFrames = new(FRAME_MAX);
         private ValueStack<Value> _stack = new(FRAME_MAX * STACK_MAX);
         private Table _globals = new();
-        public InterpretResult Interpret(Function function, Disassembler? disassembler = null)
+
+        public InterpretResult Interpret(Function function)
         {
             _stack.Push(new Value(function));
 
             CallFrame callframe = new(function, 0);
             _callFrames.Push(callframe);
 
-            return Run(disassembler);
+            return Run();
         }
 
-        private InterpretResult Run(Disassembler? disassembler = null)
-        {
-            ref CallFrame frame = ref _callFrames.Peek();
+        private InterpretResult Run()
+        {  
             while(true)
             {
+                ref CallFrame frame = ref _callFrames.Peek();
 #if DEBUG
+                Disassembler disassembler = Disassembler.Instance;
+
                 if (disassembler != null)
                 {
                     disassembler.DisassembleStack(_stack);
                     disassembler.DisassembleInstruction(frame.Function.Chunk, frame.Ip);
+                    Console.Write(disassembler.GetText());
                 }
 #endif
                 OpCode instruction = (OpCode)ReadByte(ref frame);
@@ -167,12 +171,30 @@ namespace LoxSharp.Core
                             frame.Ip -= offset;  
                             break;
                         }
+                    case OpCode.CALL:
+                        {
+                            int argCount = ReadByte(ref frame);
+                            CallValue(in _stack.Peek(argCount), argCount);
+                            break;
+                        }
                     case OpCode.RETURN:
-                        return InterpretResult.OK;
+                        {
+                            Value result = _stack.Pop();
+                            _callFrames.Pop();
+                            if(_callFrames.Count == 0)
+                            {
+                                _ = _stack.Pop();
+                                return InterpretResult.OK;
+                            }
+                            _stack.Discard(_stack.Count - frame.StackStart);
+                            _stack.Push(result);    
+                            break;
+                        }
                 }
             }
         }
 
+        #region Assistant method
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]  
         private byte ReadByte(ref CallFrame callFrame)
@@ -257,12 +279,57 @@ namespace LoxSharp.Core
             }
         }
 
+        private void CallValue(in Value callee, int argCount)
+        {
+            switch(callee.Type)
+            {
+                case Value.ValueType.Function:
+                    Call(callee.AsFunction, argCount);
+                    break;
+                default:
+                    ThrowRuntimeError("Can only call functions and classes.");
+                    break;// Non-callable object type.
+            }
+        }
+
+        private void Call(Function function, int argCount)
+        {
+            if (argCount != function.Arity)
+            {
+                ThrowRuntimeError($"Expected {function.Arity} arguments but got {argCount}.");
+            }
+
+            if (_callFrames.Count == FRAME_MAX)
+            {
+                ThrowRuntimeError("Stack overflow.");
+            }
+
+            CallFrame callFrame = new(function, _stack.Count - argCount - 1);
+            _callFrames.Push(callFrame);    
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void ThrowRuntimeError(string message)
         {
-            ref readonly CallFrame callFrame = ref _callFrames.Peek();
-            int line = callFrame.Function.Chunk.LineNumbers[callFrame.Ip];
-            throw new RuntimeException($"[Line {line}] {message}");    
+            string errorMsg = $"{message}\n";
+            // print method call stack.
+            for(int i = _callFrames.Count - 1; i >= 0; --i)
+            {
+                ref readonly CallFrame frame = ref _callFrames[i];
+                Function function = frame.Function;
+                int line = function.Chunk.LineNumbers[frame.Ip - 1];
+                errorMsg += $"[Line {line}] in ";
+                if(function.Name == null)
+                {
+                    errorMsg += "Main\n";
+                }
+                else
+                {
+                    errorMsg += $"{function.Name}\n";
+                }
+            }
+            throw new RuntimeException(errorMsg);    
         }
+        #endregion
     }
 }
