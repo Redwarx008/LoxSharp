@@ -43,6 +43,7 @@ namespace LoxSharp.Core
 
         CALL,
         CLASS,
+        CLASS_METHOD,
         RETURN
     }
 }

@@ -85,13 +85,13 @@ namespace LoxSharp.Core
                         break;
                     case OpCode.GET_LOCAL:
                         {
-                            byte slot = ReadByte(ref frame);
+                            int slot = ReadByte(ref frame) + frame.StackStart;
                             _stack.Push(_stack[slot]);
                             break;
                         }
                     case OpCode.SET_LOCAL:
                         {
-                            byte slot = ReadByte(ref frame);
+                            int slot = ReadByte(ref frame) + frame.StackStart;
                             _stack[slot] = _stack.Peek();
                             break;
                         }
@@ -136,15 +136,14 @@ namespace LoxSharp.Core
 
                             Instance instance = _stack.Peek().AsInstance;
                             string propertyName = ReadConstant(ref frame).AsString; 
-                            if (!instance.Fields.TryGetValue(propertyName, out var value))
+                            if (instance.Fields.TryGetValue(propertyName, out var value))
                             {
-                                ThrowRuntimeError($"Undefined property '{propertyName}'.");
+                                _stack[_stack.Count - 1] = value;
+                                break;
                             }
-                            else
-                            {
-                                _stack.Pop();
-                                _stack.Push(value); 
-                            }
+
+                            // if property is a method
+                            BindMethod(instance.Class, propertyName);
                             break;
                         }
                     case OpCode.SET_PROPERTY:
@@ -230,6 +229,15 @@ namespace LoxSharp.Core
                         {
                             string className = ReadConstant(ref frame).AsString;
                             _stack.Push(new Value(new InternalClass(className)));
+                            break;
+                        }
+                    case OpCode.CLASS_METHOD:
+                        {
+                            string methodName = ReadConstant(ref frame).AsString;   
+                            Value method = _stack.Peek();
+                            InternalClass internalClass = _stack.Peek(1).AsClass;
+                            internalClass.Methods[methodName] = method.AsFunction;
+                            _stack.Pop();
                             break;
                         }
                 }
@@ -328,6 +336,11 @@ namespace LoxSharp.Core
                 case Value.ValueType.Function:
                     Call(callee.AsFunction, argCount);
                     break;
+                case Value.ValueType.BoundMethod:
+                    BoundMethod boundMethod = callee.AsBoundMethod;
+                    _stack[_stack.Count - argCount - 1] = boundMethod.Receiver;
+                    Call(boundMethod.Function, argCount);
+                    break;
                 case Value.ValueType.Class:
                     CreateInstance(callee.AsClass, argCount);
                     break;
@@ -357,6 +370,19 @@ namespace LoxSharp.Core
         {
             Instance instance = new(internalClass);
             _stack[_stack.Count - 1 - argCount] = new Value(instance);  
+        }
+
+        private void BindMethod(InternalClass internalClass, string methodName)
+        {
+            if (!internalClass.Methods.TryGetValue(methodName, out var method)) 
+            {
+                ThrowRuntimeError($"Undefined property '{methodName}'");
+            }
+            else
+            {
+                BoundMethod boundMethod = new(_stack.Peek(), method);
+                _stack[_stack.Count - 1] = new Value(boundMethod);
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

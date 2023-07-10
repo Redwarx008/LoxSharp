@@ -15,6 +15,7 @@ namespace LoxSharp.Core
         private enum FunctionType
         {
             Function,
+            ClassMethod,
             Script
         }
 
@@ -81,8 +82,14 @@ namespace LoxSharp.Core
                 FunctionType = functionType;
 
                 // In the VM, stack slot 0 stores the calling function. 
-                LocalVariabal local = new("PlaceHolder", 0);
-                LocalVars.Add(local);   
+                if (functionType == FunctionType.ClassMethod)
+                {
+                    LocalVars.Add(new LocalVariabal("this", 0));
+                }
+                else
+                {
+                    LocalVars.Add(new LocalVariabal("PlaceHolder", 0));
+                }
             }
         }
 
@@ -138,7 +145,7 @@ namespace LoxSharp.Core
             _rules[(int)TokenType.PRINT] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.RETURN] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.SUPER] = new ParseRule(null, null, Precedence.None);
-            _rules[(int)TokenType.THIS] = new ParseRule(null, null, Precedence.None);
+            _rules[(int)TokenType.THIS] = new ParseRule(This, null, Precedence.None);
             _rules[(int)TokenType.TRUE] = new ParseRule(Literal, null, Precedence.None);
             _rules[(int)TokenType.VAR] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.WHILE] = new ParseRule(null, null, Precedence.None);
@@ -355,14 +362,14 @@ namespace LoxSharp.Core
 
         private void Variable(bool canAssign)
         {
-            NamedVariable(_previousToken, canAssign);
+            NamedVariable(_previousToken.Name, canAssign);
         }
 
-        private void NamedVariable(Token variable, bool canAssign)
+        private void NamedVariable(string variableName, bool canAssign)
         {
             OpCode getOp, setOp;
 
-            int localIndex = ResolveLocalVar(CurrentState, variable.Name);
+            int localIndex = ResolveLocalVar(CurrentState, variableName);
             if(localIndex != -1) 
             {
                 getOp = OpCode.GET_LOCAL;
@@ -370,7 +377,7 @@ namespace LoxSharp.Core
             }
             else
             {
-                localIndex = MakeConstant(new Value(variable.Name));    
+                localIndex = MakeConstant(new Value(variableName));    
                 getOp = OpCode.GET_GLOBAL;
                 setOp = OpCode.SET_GLOBAL;
             }
@@ -497,6 +504,10 @@ namespace LoxSharp.Core
             PatchJump(endJump); 
         }
 
+        private void This(bool canAssign)
+        {
+            Variable(false);
+        }
         #endregion
 
         #region Parse expression or statement method
@@ -795,35 +806,30 @@ namespace LoxSharp.Core
         {
             byte global = ParseVariable("Expect function name.");
             MarkLocalInitialized();
-            ParseFunction();
+            ParseFunction(FunctionType.Function);
             DefineVariable(global);
         }
 
         private void ClassDeclaration()
         {
             Consume(TokenType.IDENTIFIER, "Expect class name.");
+            string className = _previousToken.Name;
             byte nameConstIndex = MakeConstant(new Value(_previousToken.Name));
             DeclareVariable();
 
             EmitBytes((byte)OpCode.CLASS, nameConstIndex);
             DefineVariable(nameConstIndex);
 
+            NamedVariable(className, false);
             Consume(TokenType.LEFT_BRACE, "Expect '{' before class body.");
 
-            Consume(TokenType.RIGHT_BRACE, "Expect '}' after class body.");
-        }
-
-        private byte ParseVariable(string errorMessage)
-        {
-            Consume(TokenType.IDENTIFIER, errorMessage);
-
-            DeclareVariable();
-            if (CurrentState.ScopeDepth > 0)
+            while(!Check(TokenType.RIGHT_BRACE) && !Check(TokenType.EOF))
             {
-                return 0;
+                ParseClassMethod();
             }
 
-            return MakeConstant(new Value(_previousToken.Name));
+            Consume(TokenType.RIGHT_BRACE, "Expect '}' after class body.");
+            EmitBytes((byte)OpCode.POP);
         }
 
         private void ParsePrecedence(Precedence precedence)
@@ -855,9 +861,22 @@ namespace LoxSharp.Core
 
         #region assistant method 
 
-        private void ParseFunction()
+        private byte ParseVariable(string errorMessage)
         {
-            BeginCompilerState(FunctionType.Function);
+            Consume(TokenType.IDENTIFIER, errorMessage);
+
+            DeclareVariable();
+            if (CurrentState.ScopeDepth > 0)
+            {
+                return 0;
+            }
+
+            return MakeConstant(new Value(_previousToken.Name));
+        }
+
+        private void ParseFunction(FunctionType functionType)
+        {
+            BeginCompilerState(functionType);
 
             BeginScope();
 
@@ -903,6 +922,16 @@ namespace LoxSharp.Core
             }
             Consume(TokenType.RIGHT_PAREN, "Expect ')' after arguments.");
             return argCount;
+        }
+
+        private void ParseClassMethod()
+        {
+            Consume(TokenType.IDENTIFIER, "Expect method name.");
+            byte nameConstIndx = MakeConstant(new Value(_previousToken.Name));
+
+            ParseFunction(FunctionType.ClassMethod);
+
+            EmitBytes((byte)OpCode.CLASS_METHOD, nameConstIndx);    
         }
 
         private void DefineVariable(byte global)

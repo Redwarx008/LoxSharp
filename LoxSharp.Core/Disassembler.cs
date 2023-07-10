@@ -92,6 +92,7 @@ namespace LoxSharp.Core
                 case OpCode.SET_PROPERTY:
                 case OpCode.DEFINE_GLOBAL:
                 case OpCode.CLASS:
+                case OpCode.CLASS_METHOD:
                     return ConstantInstruction(instruction, chunk, offset);
                 case OpCode.JUMP:
                 case OpCode.JUMP_IF_FALSE:

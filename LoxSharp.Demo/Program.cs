@@ -49,18 +49,18 @@ namespace LoxSharp.Demo
             {
                 Console.WriteLine(e.Message);
             }
-            catch(CompilerException e)
+            catch (CompilerException e)
             {
                 Console.WriteLine(e.Message);
             }
-            catch(RuntimeException e)
+            catch (RuntimeException e)
             {
                 Console.WriteLine(e.Message);
             }
-            //catch(Exception e)
-            //{
-            //    Console.WriteLine(e.Message);
-            //}
+            catch (Exception e)
+            {
+                Console.WriteLine(e.Message);
+            }
         }
     }
 }

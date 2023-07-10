@@ -26,6 +26,7 @@ namespace LoxSharp.Core
             Function,
             Class,
             Instance,
+            BoundMethod,
         }
 
         [StructLayout(LayoutKind.Explicit)]
@@ -85,6 +86,14 @@ namespace LoxSharp.Core
                 return (Instance)_obj!;
             }
         }
+        public readonly BoundMethod AsBoundMethod
+        {
+            get
+            {
+                Debug.Assert(IsBoundMethod);
+                return (BoundMethod)_obj!;
+            }
+        }
 
 
         public readonly ValueType Type => _type;
@@ -96,6 +105,7 @@ namespace LoxSharp.Core
         public readonly bool IsFunction => _type == ValueType.Function; 
         public readonly bool IsClass => _type == ValueType.Class;
         public readonly bool IsInstance => _type == ValueType.Instance;
+        public readonly bool IsBoundMethod => _type == ValueType.BoundMethod;
 
         public Value(double val)
         {
@@ -143,6 +153,13 @@ namespace LoxSharp.Core
             _obj = val;
         }
 
+        public Value(BoundMethod val)
+        {
+            _data = default;
+            _type = ValueType.BoundMethod;
+            _obj = val;
+        }
+
         public Value()
         {
             _data = default;
@@ -170,6 +187,8 @@ namespace LoxSharp.Core
                     return AsClass == other.AsClass;
                 case ValueType.Instance:
                     return AsInstance == other.AsInstance;
+                case ValueType.BoundMethod:
+                    return AsBoundMethod == other.AsBoundMethod;
                 case ValueType.Null:
                     return true;
                 default: return false; // Unreachable.
@@ -198,6 +217,7 @@ namespace LoxSharp.Core
                 case ValueType.Function:
                 case ValueType.Class:
                 case ValueType.Instance:
+                case ValueType.BoundMethod:
                 default:
                     return _obj!.GetHashCode();
             }
@@ -220,7 +240,9 @@ namespace LoxSharp.Core
                 case ValueType.Class:
                     return AsClass.ToString();
                 case ValueType.Instance:
-                    return AsInstance.ToString();   
+                    return AsInstance.ToString();
+                case ValueType.BoundMethod:
+                    return AsBoundMethod.ToString();
                 default:
                     return "type not implemented";
             }
