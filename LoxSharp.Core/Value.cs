@@ -24,6 +24,8 @@ namespace LoxSharp.Core
             Double,
             String,
             Function,
+            Class,
+            Instance,
         }
 
         [StructLayout(LayoutKind.Explicit)]
@@ -67,6 +69,23 @@ namespace LoxSharp.Core
                 return (Function)_obj!;
             }
         }
+        public readonly InternalClass AsClass
+        {
+            get
+            {
+                Debug.Assert(IsClass);
+                return (InternalClass)_obj!;
+            }
+        }
+        public readonly Instance AsInstance
+        {
+            get
+            {
+                Debug.Assert(IsInstance);
+                return (Instance)_obj!;
+            }
+        }
+
 
         public readonly ValueType Type => _type;
 
@@ -75,6 +94,8 @@ namespace LoxSharp.Core
         public readonly bool IsNumber => _type == ValueType.Double;
         public readonly bool IsString => _type == ValueType.String;  
         public readonly bool IsFunction => _type == ValueType.Function; 
+        public readonly bool IsClass => _type == ValueType.Class;
+        public readonly bool IsInstance => _type == ValueType.Instance;
 
         public Value(double val)
         {
@@ -108,6 +129,20 @@ namespace LoxSharp.Core
             _obj = val;
         }
 
+        public Value(InternalClass val)
+        {
+            _data = default;
+            _type = ValueType.Class;
+            _obj = val;
+        }
+
+        public Value(Instance val)
+        {
+            _data= default;
+            _type = ValueType.Instance;
+            _obj = val;
+        }
+
         public Value()
         {
             _data = default;
@@ -129,6 +164,12 @@ namespace LoxSharp.Core
                     return AsDouble == other.AsDouble;
                 case ValueType.String:
                     return AsString == other.AsString;
+                case ValueType.Function:
+                    return AsFunction == other.AsFunction;
+                case ValueType.Class:
+                    return AsClass == other.AsClass;
+                case ValueType.Instance:
+                    return AsInstance == other.AsInstance;
                 case ValueType.Null:
                     return true;
                 default: return false; // Unreachable.
@@ -154,6 +195,9 @@ namespace LoxSharp.Core
                     return AsDouble.GetHashCode();
                 case ValueType.Null:
                 case ValueType.String:
+                case ValueType.Function:
+                case ValueType.Class:
+                case ValueType.Instance:
                 default:
                     return _obj!.GetHashCode();
             }
@@ -172,7 +216,11 @@ namespace LoxSharp.Core
                 case ValueType.String:
                     return $"'{AsString}'";
                 case ValueType.Function:
-                    return AsFunction.ToString();   
+                    return AsFunction.ToString();
+                case ValueType.Class:
+                    return AsClass.ToString();
+                case ValueType.Instance:
+                    return AsInstance.ToString();   
                 default:
                     return "type not implemented";
             }

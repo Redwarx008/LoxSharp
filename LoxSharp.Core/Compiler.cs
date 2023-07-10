@@ -109,7 +109,7 @@ namespace LoxSharp.Core
             _rules[(int)TokenType.LEFT_BRACE] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.RIGHT_BRACE] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.COMMA] = new ParseRule(null, null, Precedence.None);
-            _rules[(int)TokenType.DOT] = new ParseRule(null, null, Precedence.None);
+            _rules[(int)TokenType.DOT] = new ParseRule(null, Dot, Precedence.Call);
             _rules[(int)TokenType.MINUS] = new ParseRule(Unary, Binary, Precedence.Term);
             _rules[(int)TokenType.PLUS] = new ParseRule(null, Binary, Precedence.Term);
             _rules[(int)TokenType.SEMICOLON] = new ParseRule(null, null, Precedence.None);
@@ -453,6 +453,22 @@ namespace LoxSharp.Core
             EmitBytes((byte)OpCode.CALL, argCount);
         }
 
+        private void Dot(bool canAssign)
+        {
+            Consume(TokenType.IDENTIFIER, "Expect property name after '.'.");
+            byte nameConstIndex = MakeConstant(new Value(_previousToken.Name));
+            
+            if (canAssign && Match(TokenType.EQUAL))
+            {
+                Expression();
+                EmitBytes((byte)OpCode.SET_PROPERTY, nameConstIndex);   
+            }
+            else
+            {
+                EmitBytes((byte)OpCode.GET_PROPERTY, nameConstIndex);   
+            }
+        }
+
         private void Grouping(bool canAssign)
         {
             Expression();
@@ -741,7 +757,11 @@ namespace LoxSharp.Core
 
         private void Declaration()
         {
-            if (Match(TokenType.FUN))
+            if (Match(TokenType.CLASS))
+            {
+                ClassDeclaration(); 
+            }
+            else if (Match(TokenType.FUN))
             {
                 FunDeclaration();   
             }
@@ -777,6 +797,20 @@ namespace LoxSharp.Core
             MarkLocalInitialized();
             ParseFunction();
             DefineVariable(global);
+        }
+
+        private void ClassDeclaration()
+        {
+            Consume(TokenType.IDENTIFIER, "Expect class name.");
+            byte nameConstIndex = MakeConstant(new Value(_previousToken.Name));
+            DeclareVariable();
+
+            EmitBytes((byte)OpCode.CLASS, nameConstIndex);
+            DefineVariable(nameConstIndex);
+
+            Consume(TokenType.LEFT_BRACE, "Expect '{' before class body.");
+
+            Consume(TokenType.RIGHT_BRACE, "Expect '}' after class body.");
         }
 
         private byte ParseVariable(string errorMessage)

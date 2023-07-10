@@ -20,6 +20,8 @@ namespace LoxSharp.Core
         DEFINE_GLOBAL,
         GET_GLOBAL,
         SET_GLOBAL,
+        GET_PROPERTY,
+        SET_PROPERTY,
 
         EQUAL,
         GREATER,
@@ -34,10 +36,13 @@ namespace LoxSharp.Core
         NEGATE,
 
         PRINT,
+
         JUMP_IF_FALSE,
         JUMP,
         LOOP,
-        CALL,   
+
+        CALL,
+        CLASS,
         RETURN
     }
 }

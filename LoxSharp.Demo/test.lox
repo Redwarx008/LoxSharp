@@ -1,7 +1,6 @@
-fun a() { b(); }
-fun b() { c(); }
-fun c() {
-  c("too", "many");
-}
+class Pair {}
 
-a();
+var pair = Pair();
+pair.first = 1;
+pair.second = 2;
+print pair.first + pair.second; // 3.

@@ -127,7 +127,43 @@ namespace LoxSharp.Core
                             }
                             break;
                         }
+                    case OpCode.GET_PROPERTY:
+                        {
+                            if (!_stack.Peek().IsInstance)
+                            {
+                                ThrowRuntimeError("Only instances have properties.");
+                            }
 
+                            Instance instance = _stack.Peek().AsInstance;
+                            string propertyName = ReadConstant(ref frame).AsString; 
+                            if (!instance.Fields.TryGetValue(propertyName, out var value))
+                            {
+                                ThrowRuntimeError($"Undefined property '{propertyName}'.");
+                            }
+                            else
+                            {
+                                _stack.Pop();
+                                _stack.Push(value); 
+                            }
+                            break;
+                        }
+                    case OpCode.SET_PROPERTY:
+                        {
+                            if (!_stack.Peek(1).IsInstance)
+                            {
+                                ThrowRuntimeError("Only instances have fields.");
+                            }
+
+                            Instance instance = _stack.Peek(1).AsInstance;
+                            string fieldName = ReadConstant(ref frame).AsString;
+                            instance.Fields[fieldName] = _stack.Peek();
+
+                            // remove the second element from the stack.
+                            Value val = _stack.Pop();
+                            _stack.Pop();
+                            _stack.Push(val);
+                            break;
+                        }
                     case OpCode.EQUAL:
                     case OpCode.GREATER:
                     case OpCode.LESS:
@@ -188,6 +224,12 @@ namespace LoxSharp.Core
                             }
                             _stack.Discard(_stack.Count - frame.StackStart);
                             _stack.Push(result);    
+                            break;
+                        }
+                    case OpCode.CLASS:
+                        {
+                            string className = ReadConstant(ref frame).AsString;
+                            _stack.Push(new Value(new InternalClass(className)));
                             break;
                         }
                 }
@@ -286,6 +328,9 @@ namespace LoxSharp.Core
                 case Value.ValueType.Function:
                     Call(callee.AsFunction, argCount);
                     break;
+                case Value.ValueType.Class:
+                    CreateInstance(callee.AsClass, argCount);
+                    break;
                 default:
                     ThrowRuntimeError("Can only call functions and classes.");
                     break;// Non-callable object type.
@@ -306,6 +351,12 @@ namespace LoxSharp.Core
 
             CallFrame callFrame = new(function, _stack.Count - argCount - 1);
             _callFrames.Push(callFrame);    
+        }
+
+        private void CreateInstance(InternalClass internalClass, int argCount)
+        {
+            Instance instance = new(internalClass);
+            _stack[_stack.Count - 1 - argCount] = new Value(instance);  
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
