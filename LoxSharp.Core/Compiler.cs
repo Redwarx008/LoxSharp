@@ -62,6 +62,10 @@ namespace LoxSharp.Core
 
         private class CompilerState
         {
+            internal struct ClassState
+            {
+
+            }
             internal class LoopState
             {
                 public int LoopStart { get; set; } = 0;
@@ -70,6 +74,7 @@ namespace LoxSharp.Core
             }
             public List<LocalVariabal> LocalVars { get; private set; }
             public Stack<LoopState> LoopStates { get; private set; } 
+            public Stack<ClassState> ClassStates { get; private set; }
             public int ScopeDepth { get; set; } = 0;
             public FunctionType FunctionType { get; private set; }
             public Function Function { get; private set; }
@@ -78,6 +83,7 @@ namespace LoxSharp.Core
             {
                 LocalVars = new List<LocalVariabal>(16);
                 LoopStates = new Stack<LoopState>();
+                ClassStates = new Stack<ClassState>();
                 Function = new Function();
                 FunctionType = functionType;
 
@@ -506,8 +512,14 @@ namespace LoxSharp.Core
 
         private void This(bool canAssign)
         {
+            if (CurrentState.ClassStates.Count == 0)
+            {
+                throw new CompilerException(_previousToken, "Can't use 'this' outside of a class.");
+            }
+
             Variable(false);
         }
+
         #endregion
 
         #region Parse expression or statement method
@@ -820,6 +832,8 @@ namespace LoxSharp.Core
             EmitBytes((byte)OpCode.CLASS, nameConstIndex);
             DefineVariable(nameConstIndex);
 
+            CurrentState.ClassStates.Push(new CompilerState.ClassState());
+
             NamedVariable(className, false);
             Consume(TokenType.LEFT_BRACE, "Expect '{' before class body.");
 
@@ -830,6 +844,8 @@ namespace LoxSharp.Core
 
             Consume(TokenType.RIGHT_BRACE, "Expect '}' after class body.");
             EmitBytes((byte)OpCode.POP);
+
+            CurrentState.ClassStates.Pop();
         }
 
         private void ParsePrecedence(Precedence precedence)

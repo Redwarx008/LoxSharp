@@ -21,7 +21,7 @@ namespace LoxSharp.Core
 
         public override string ToString() 
         {
-            return Name;
+            return $"class {Name}";
         }
     }
 }
