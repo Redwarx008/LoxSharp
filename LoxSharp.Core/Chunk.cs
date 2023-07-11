@@ -1,16 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace LoxSharp.Core
+﻿namespace LoxSharp.Core
 {
     internal class Chunk
     {
         public List<byte> Instructions { get; private set; } = new List<byte>();
 
-        public List<Value> Constants { get; private set; } = new List<Value>(); 
+        public List<Value> Constants { get; private set; } = new List<Value>();
 
         public IReadOnlyList<int> LineNumbers => _lineNumbers;
 

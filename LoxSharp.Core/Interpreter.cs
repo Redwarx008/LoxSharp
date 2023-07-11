@@ -1,10 +1,4 @@
-﻿using LoxSharp.Core.Utility;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Diagnostics;
 
 namespace LoxSharp.Core
 {
@@ -13,7 +7,7 @@ namespace LoxSharp.Core
         private Scanner _scanner;
         private Compiler _compiler;
         private VM _vm;
-        public Interpreter() 
+        public Interpreter()
         {
             _scanner = new Scanner();
             _compiler = new Compiler();
@@ -24,9 +18,14 @@ namespace LoxSharp.Core
         {
             _scanner.Reset();
             _compiler.Reset();
-            List<Token> tokens = _scanner.Scan(src);    
-            Function function = _compiler.Compile(tokens);    
-            _vm.Interpret(function);
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            List<Token> tokens = _scanner.Scan(src);
+            stopwatch.Stop();
+            var compiledScript = _compiler.Compile(tokens);
+
+            _vm.Interpret(compiledScript);
+
+            Console.WriteLine(stopwatch.ElapsedMilliseconds);
         }
 
     }

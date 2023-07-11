@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection.Emit;
-using System.Runtime.CompilerServices;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Runtime.CompilerServices;
 
 namespace LoxSharp.Core.Utility
 {
@@ -12,18 +6,18 @@ namespace LoxSharp.Core.Utility
     {
         private T[] _values;
 
-        private int _stackTopIndex = 0; 
+        private int _stackTopIndex = 0;
 
-        public ValueStack(int capacity) 
+        public ValueStack(int capacity)
         {
-            _values = new T[capacity];  
+            _values = new T[capacity];
         }
 
         public int Count => _stackTopIndex;
 
         public ref T this[int i]
         {
-            get => ref _values[i];  
+            get => ref _values[i];
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -34,7 +28,7 @@ namespace LoxSharp.Core.Utility
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public T Pop() 
+        public T Pop()
         {
             --_stackTopIndex;
             return _values[_stackTopIndex];

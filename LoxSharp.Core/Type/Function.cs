@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace LoxSharp.Core.Utility
+﻿namespace LoxSharp.Core.Utility
 {
     internal class Function
     {
@@ -12,14 +6,14 @@ namespace LoxSharp.Core.Utility
         public Chunk Chunk { get; private set; }
         public string? Name { get; set; }
 
-        public Function() 
+        public Function()
         {
             Chunk = new Chunk();
-            Arity = 0;  
+            Arity = 0;
         }
         public override string ToString()
         {
-            if(Name == null)
+            if (Name == null)
             {
                 return "<Main>";
             }

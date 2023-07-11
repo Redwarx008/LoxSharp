@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace LoxSharp.Core
+﻿namespace LoxSharp.Core
 {
     internal enum TokenType
     {
@@ -23,7 +17,7 @@ namespace LoxSharp.Core
 
         // Keywords.
         AND, CLASS, ELSE, FALSE, FUN, FOR, IF, NIL, OR,
-        PRINT, RETURN, SUPER, THIS, TRUE, VAR, WHILE, 
+        PRINT, RETURN, SUPER, THIS, TRUE, VAR, WHILE,
         CONTINUE, BREAK,
 
         EOF
@@ -43,7 +37,7 @@ namespace LoxSharp.Core
             this.Line = line;
         }
 
-        public override string ToString() 
+        public override string ToString()
         {
             return $"Line {Line} {Type} {Name}";
         }

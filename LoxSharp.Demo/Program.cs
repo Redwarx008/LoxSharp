@@ -1,5 +1,4 @@
 ﻿using LoxSharp.Core;
-using System.Diagnostics;
 
 namespace LoxSharp.Demo
 {
@@ -45,7 +44,7 @@ namespace LoxSharp.Demo
             {
                 interpreter.Run(source);
             }
-            catch(ScannerException e)
+            catch (ScannerException e)
             {
                 Console.WriteLine(e.Message);
             }

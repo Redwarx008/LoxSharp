@@ -2,7 +2,7 @@
   "profiles": {
     "LoxSharp.Demo": {
       "commandName": "Project",
-      "commandLineArgs": "test.lox\r\n",
+      "commandLineArgs": "test.lox",
       "workingDirectory": "."
     }
   }

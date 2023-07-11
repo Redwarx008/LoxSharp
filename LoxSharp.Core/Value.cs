@@ -1,13 +1,7 @@
 ﻿using LoxSharp.Core.Utility;
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace LoxSharp.Core
 {
@@ -19,6 +13,7 @@ namespace LoxSharp.Core
 
         internal enum ValueType
         {
+            Undefined,
             Null,
             Bool,
             Double,
@@ -58,7 +53,7 @@ namespace LoxSharp.Core
         {
             get
             {
-                Debug.Assert(IsString);
+                Debug.Assert(IsString || IsUndefined);
                 return (string)_obj!;
             }
         }
@@ -98,11 +93,12 @@ namespace LoxSharp.Core
 
         public readonly ValueType Type => _type;
 
+        public readonly bool IsUndefined => _type == ValueType.Undefined;
         public readonly bool IsNull => _type == ValueType.Null;
         public readonly bool IsBool => _type == ValueType.Bool;
         public readonly bool IsNumber => _type == ValueType.Double;
-        public readonly bool IsString => _type == ValueType.String;  
-        public readonly bool IsFunction => _type == ValueType.Function; 
+        public readonly bool IsString => _type == ValueType.String;
+        public readonly bool IsFunction => _type == ValueType.Function;
         public readonly bool IsClass => _type == ValueType.Class;
         public readonly bool IsInstance => _type == ValueType.Instance;
         public readonly bool IsBoundMethod => _type == ValueType.BoundMethod;
@@ -129,7 +125,7 @@ namespace LoxSharp.Core
         {
             _data = default;
             _type = ValueType.String;
-            _obj = val; 
+            _obj = val;
         }
 
         public Value(Function val)
@@ -148,7 +144,7 @@ namespace LoxSharp.Core
 
         public Value(Instance val)
         {
-            _data= default;
+            _data = default;
             _type = ValueType.Instance;
             _obj = val;
         }
@@ -164,7 +160,7 @@ namespace LoxSharp.Core
         {
             _data = default;
             _type = ValueType.Null;
-            _obj = null;    
+            _obj = null;
         }
 
         public bool Equals(Value other)
@@ -197,16 +193,16 @@ namespace LoxSharp.Core
 
         public override bool Equals([NotNullWhen(true)] object? obj)
         {
-            if(obj == null)
+            if (obj == null)
             {
                 return false;
             }
-            return obj is Value value && Equals(value);  
+            return obj is Value value && Equals(value);
         }
 
         public override int GetHashCode()
         {
-            switch(_type) 
+            switch (_type)
             {
                 case ValueType.Bool:
                     return AsBool.GetHashCode();
@@ -225,8 +221,10 @@ namespace LoxSharp.Core
 
         public override string ToString()
         {
-            switch(_type)
+            switch (_type)
             {
+                case ValueType.Undefined:
+                    return $"undefined {AsString}";
                 case ValueType.Null:
                     return "null";
                 case ValueType.Bool:
@@ -253,15 +251,15 @@ namespace LoxSharp.Core
             {
                 return new Value(a.AsDouble + b.AsDouble);
             }
-            else if(a.IsString && b.IsString)
+            else if (a.IsString && b.IsString)
             {
-                return new Value(a.AsString + b.AsString);  
+                return new Value(a.AsString + b.AsString);
             }
-            else if(a.IsString && b.IsNumber)
+            else if (a.IsString && b.IsNumber)
             {
                 return new Value(a.AsString + b.AsDouble.ToString());
             }
-            return new Value(); 
+            return new Value();
         }
 
         public static Value operator -(Value a, Value b)
@@ -308,9 +306,9 @@ namespace LoxSharp.Core
 
         public static Value operator >(Value a, Value b)
         {
-            if(a.IsNumber && b.IsNumber)
+            if (a.IsNumber && b.IsNumber)
             {
-                return  new Value(a.AsDouble > b.AsDouble); 
+                return new Value(a.AsDouble > b.AsDouble);
             }
             return new Value();
         }
@@ -322,6 +320,16 @@ namespace LoxSharp.Core
                 return new Value(a.AsDouble < b.AsDouble);
             }
             return new Value();
+        }
+
+        public static Value NewUndefined(string name)
+        {
+            return new Value
+            {
+                _type = ValueType.Undefined,
+                _obj = name,
+                _data = default
+            };
         }
 
     }

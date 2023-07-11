@@ -1,9 +1,5 @@
 ﻿using LoxSharp.Core.Utility;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace LoxSharp.Core
 {
@@ -11,7 +7,7 @@ namespace LoxSharp.Core
     {
         public static Disassembler Instance => _disassembler;
 
-        private static Disassembler _disassembler = new(); 
+        private static Disassembler _disassembler = new();
         private StringBuilder _sb = new();
 
         private Disassembler()
@@ -23,14 +19,14 @@ namespace LoxSharp.Core
         {
             string txt = _sb.ToString();
             _sb.Clear();
-            return txt;  
+            return txt;
         }
 
         public void DisassembleChunk(Chunk chunk, string name)
         {
-            _sb.Clear();    
+            _sb.Clear();
             _sb.Append($"== {name} ==\n");
-            for(int offset = 0; offset < chunk.Instructions.Count;)
+            for (int offset = 0; offset < chunk.Instructions.Count;)
             {
                 offset = DisassembleInstruction(chunk, offset);
             }
@@ -39,7 +35,7 @@ namespace LoxSharp.Core
         public void DisassembleStack(ValueStack<Value> stack)
         {
             _sb.Append("          ");
-            for(int i = 0; i < stack.Count; ++i)
+            for (int i = 0; i < stack.Count; ++i)
             {
                 _sb.Append($"[{stack[i]}]");
             }
@@ -52,17 +48,17 @@ namespace LoxSharp.Core
             _sb.Append(offset.ToString("0000"));
 
             // line number
-            if(offset > 0 && chunk.LineNumbers[offset] == chunk.LineNumbers[offset - 1])
+            if (offset > 0 && chunk.LineNumbers[offset] == chunk.LineNumbers[offset - 1])
             {
                 _sb.Append("   | ");
             }
             else
             {
-                _sb.Append($"{chunk.LineNumbers[offset], 4} ");
+                _sb.Append($"{chunk.LineNumbers[offset],4} ");
             }
 
-            OpCode instruction = ( OpCode)chunk.Instructions[offset];
-            switch (instruction) 
+            OpCode instruction = (OpCode)chunk.Instructions[offset];
+            switch (instruction)
             {
                 case OpCode.CONSTANT:
                     return ConstantInstruction(instruction, chunk, offset);
@@ -100,7 +96,7 @@ namespace LoxSharp.Core
                 case OpCode.JUMP_IF_FALSE:
                     return JumpInstruction(instruction, 1, chunk, offset);
                 case OpCode.LOOP:
-                    return JumpInstruction(instruction, -1, chunk, offset); 
+                    return JumpInstruction(instruction, -1, chunk, offset);
                 default:
                     _sb.Append($"Unknown opcode {instruction.ToString()}");
                     return offset + 1;
@@ -110,15 +106,15 @@ namespace LoxSharp.Core
         private int ConstantInstruction(OpCode instruction, Chunk chunk, int offset)
         {
             byte constant = chunk.Instructions[offset + 1];
-            _sb.Append($"{instruction.ToString(), -16}{constant, 4}");
+            _sb.Append($"{instruction.ToString(),-16}{constant,4}");
             _sb.Append($"    {chunk.Constants[constant].ToString()}");
             _sb.Append('\n');
-            return offset + 2;  
+            return offset + 2;
         }
 
         private int InvokeInstruction(OpCode instruction, Chunk chunk, int offset)
         {
-            byte constant = chunk.Instructions[offset + 1]; 
+            byte constant = chunk.Instructions[offset + 1];
             byte argCount = chunk.Instructions[offset + 2];
             _sb.Append($"{instruction.ToString(),-16}({argCount,4}) args ");
             _sb.Append($"{constant,4}\n");
@@ -129,14 +125,14 @@ namespace LoxSharp.Core
         {
             _sb.Append(instruction.ToString());
             _sb.Append('\n');
-            return offset + 1;  
+            return offset + 1;
         }
 
-        private int ByteInstruction(OpCode instruction, Chunk chunk, int offset) 
+        private int ByteInstruction(OpCode instruction, Chunk chunk, int offset)
         {
             byte slot = chunk.Instructions[offset + 1];
-            _sb.Append($"{instruction.ToString(), -16}{slot, 4}\n");
-            return offset + 2;  
+            _sb.Append($"{instruction.ToString(),-16}{slot,4}\n");
+            return offset + 2;
         }
 
         private int JumpInstruction(OpCode instruction, int direction, Chunk chunk, int offset)
@@ -145,7 +141,7 @@ namespace LoxSharp.Core
             var low = chunk.Instructions[offset + 2];
             ushort jump = (ushort)(high | low);
 
-            _sb.Append($"{instruction.ToString(), -16}{offset, 4} -> {offset + 3 + direction * jump}\n");
+            _sb.Append($"{instruction.ToString(),-16}{offset,4} -> {offset + 3 + direction * jump}\n");
             return offset + 3;
         }
     }

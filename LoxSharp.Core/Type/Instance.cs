@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace LoxSharp.Core
+﻿namespace LoxSharp.Core
 {
     internal class Instance
     {
@@ -20,7 +14,7 @@ namespace LoxSharp.Core
 
         public override string ToString()
         {
-            return $"{Class} instance";    
+            return $"{Class} instance";
         }
     }
 }
