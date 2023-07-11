@@ -16,6 +16,7 @@ namespace LoxSharp.Core
         {
             Function,
             ClassMethod,
+            Initialized,
             Script
         }
 
@@ -60,12 +61,8 @@ namespace LoxSharp.Core
             }   
         }
 
-        private class CompilerState
+        private class FunctionCompileState
         {
-            internal struct ClassState
-            {
-
-            }
             internal class LoopState
             {
                 public int LoopStart { get; set; } = 0;
@@ -74,21 +71,19 @@ namespace LoxSharp.Core
             }
             public List<LocalVariabal> LocalVars { get; private set; }
             public Stack<LoopState> LoopStates { get; private set; } 
-            public Stack<ClassState> ClassStates { get; private set; }
             public int ScopeDepth { get; set; } = 0;
             public FunctionType FunctionType { get; private set; }
             public Function Function { get; private set; }
 
-            public CompilerState(FunctionType functionType)
+            public FunctionCompileState(FunctionType functionType)
             {
                 LocalVars = new List<LocalVariabal>(16);
                 LoopStates = new Stack<LoopState>();
-                ClassStates = new Stack<ClassState>();
                 Function = new Function();
                 FunctionType = functionType;
 
                 // In the VM, stack slot 0 stores the calling function. 
-                if (functionType == FunctionType.ClassMethod)
+                if (functionType == FunctionType.ClassMethod || functionType == FunctionType.Initialized)
                 {
                     LocalVars.Add(new LocalVariabal("this", 0));
                 }
@@ -98,6 +93,10 @@ namespace LoxSharp.Core
                 }
             }
         }
+        internal struct ClassCompileState
+        {
+
+        }
 
         private readonly ParseRule[] _rules;
 
@@ -105,15 +104,16 @@ namespace LoxSharp.Core
         private Token _currentToken;
         private int _tokenIndex;
         private List<Token>? _tokens;
-        private Stack<CompilerState> _compilerStates;
+        private Stack<FunctionCompileState> _functionStates;
+        private Stack<ClassCompileState> _classStates;
 
-        private CompilerState CurrentState => _compilerStates.Peek();  
-
-        public Chunk CurrentChunk => CurrentState.Function.Chunk;
+        private FunctionCompileState CurrentFunctionState => _functionStates.Peek();  
+        private ClassCompileState CurrentClassState => _classStates.Peek();
+        private Chunk CurrentChunk => CurrentFunctionState.Function.Chunk;
         public Compiler()
         {
-
-            _compilerStates = new Stack<CompilerState>();
+            _classStates = new Stack<ClassCompileState>();
+            _functionStates = new Stack<FunctionCompileState>();
 
             _rules = new ParseRule[Enum.GetValues(typeof(TokenType)).Length];
             
@@ -184,33 +184,33 @@ namespace LoxSharp.Core
         [MethodImpl(MethodImplOptions.AggressiveInlining)]  
         private void BeginScope()
         {
-            ++CurrentState.ScopeDepth;
+            ++CurrentFunctionState.ScopeDepth;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]  
         private void EndScope()
         {
-            --CurrentState.ScopeDepth;
+            --CurrentFunctionState.ScopeDepth;
 
-            while (CurrentState.LocalVars.Count > 0 &&
-                CurrentState.LocalVars[CurrentState.LocalVars.Count - 1].Depth > 
-                CurrentState.ScopeDepth)
+            while (CurrentFunctionState.LocalVars.Count > 0 &&
+                CurrentFunctionState.LocalVars[CurrentFunctionState.LocalVars.Count - 1].Depth > 
+                CurrentFunctionState.ScopeDepth)
             {
                 EmitBytes((byte)OpCode.POP);
-                CurrentState.LocalVars.RemoveAt(CurrentState.LocalVars.Count - 1);
+                CurrentFunctionState.LocalVars.RemoveAt(CurrentFunctionState.LocalVars.Count - 1);
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void BeginCompilerState(FunctionType functionType)
         {
-            CompilerState compilerState = new(functionType);
+            FunctionCompileState compilerState = new(functionType);
             if(functionType != FunctionType.Script)
             {
                 compilerState.Function.Name = _previousToken.Name;
             }
             
-            _compilerStates.Push(compilerState);
+            _functionStates.Push(compilerState);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]  
@@ -218,11 +218,11 @@ namespace LoxSharp.Core
         {
 #if DEBUG
             Disassembler disassembler = Disassembler.Instance;
-            disassembler.DisassembleChunk(_compilerStates.Peek().Function.Chunk, CurrentState.Function.Name ?? "Main");
+            disassembler.DisassembleChunk(_functionStates.Peek().Function.Chunk, CurrentFunctionState.Function.Name ?? "Main");
             Console.Write(disassembler.GetText());
 #endif
             EmitReturn();
-            return _compilerStates.Pop().Function;
+            return _functionStates.Pop().Function;
         }
 
         #region utility method
@@ -283,7 +283,7 @@ namespace LoxSharp.Core
             return CurrentChunk.Instructions.Count - 1 - 2 + 1;
         }
 
-        private void PatchLoopBreakJumps(CompilerState.LoopState loopState)
+        private void PatchLoopBreakJumps(FunctionCompileState.LoopState loopState)
         {
             for(int i = 0; i < loopState.BreakJumpStarts.Count; ++i)
             {
@@ -308,7 +308,15 @@ namespace LoxSharp.Core
 
         private void EmitReturn()
         {
-            EmitBytes((byte)OpCode.NIL);
+            if (CurrentFunctionState.FunctionType == FunctionType.Initialized)
+            {
+                EmitBytes((byte)OpCode.GET_LOCAL, 0);
+            }
+            else
+            {
+                EmitBytes((byte)OpCode.NIL);
+            }
+
             EmitBytes((byte)OpCode.RETURN);
         }
 
@@ -375,7 +383,7 @@ namespace LoxSharp.Core
         {
             OpCode getOp, setOp;
 
-            int localIndex = ResolveLocalVar(CurrentState, variableName);
+            int localIndex = ResolveLocalVar(CurrentFunctionState, variableName);
             if(localIndex != -1) 
             {
                 getOp = OpCode.GET_LOCAL;
@@ -476,6 +484,11 @@ namespace LoxSharp.Core
                 Expression();
                 EmitBytes((byte)OpCode.SET_PROPERTY, nameConstIndex);   
             }
+            else if (Match(TokenType.LEFT_PAREN)) // direct invoke
+            {
+                byte argCount = ParseCallArgumentList();
+                EmitBytes((byte)OpCode.INVOKE, nameConstIndex, argCount);
+            }
             else
             {
                 EmitBytes((byte)OpCode.GET_PROPERTY, nameConstIndex);   
@@ -512,7 +525,7 @@ namespace LoxSharp.Core
 
         private void This(bool canAssign)
         {
-            if (CurrentState.ClassStates.Count == 0)
+            if (_classStates.Count == 0)
             {
                 throw new CompilerException(_previousToken, "Can't use 'this' outside of a class.");
             }
@@ -599,7 +612,7 @@ namespace LoxSharp.Core
 
         private void ReturnStatement()
         {
-            if (CurrentState.FunctionType == FunctionType.Script)
+            if (CurrentFunctionState.FunctionType == FunctionType.Script)
             {
                 throw new CompilerException(_previousToken, "Can't return from top-level code.");
             }
@@ -610,6 +623,11 @@ namespace LoxSharp.Core
             }
             else
             {
+                if (CurrentFunctionState.FunctionType == FunctionType.Initialized)
+                {
+                    throw new CompilerException(_previousToken, "Can't return a value from an initializer");
+                }
+
                 Expression();
                 Consume(TokenType.SEMICOLON, "Expect ';' after return value.");
                 EmitBytes((byte)OpCode.RETURN);
@@ -618,7 +636,7 @@ namespace LoxSharp.Core
 
         private void ContinueStatement()
         {
-            if(CurrentState.LoopStates.Count == 0)
+            if(CurrentFunctionState.LoopStates.Count == 0)
             {
                 throw new CompilerException(_previousToken, "Can't use 'continue' outside of a loop.");
             }
@@ -626,20 +644,20 @@ namespace LoxSharp.Core
             Consume(TokenType.SEMICOLON, "Expect ';' after 'continue'.");
 
             // Discard any locals created inside the loop.
-            for (int i = CurrentState.LocalVars.Count - 1;
-                i >= 0 && CurrentState.LocalVars[i].Depth > CurrentState.LoopStates.Peek().ScopeDepth;
+            for (int i = CurrentFunctionState.LocalVars.Count - 1;
+                i >= 0 && CurrentFunctionState.LocalVars[i].Depth > CurrentFunctionState.LoopStates.Peek().ScopeDepth;
                 --i)
             {
                 EmitBytes((byte)OpCode.POP);
             }
 
             // Jump to top of current innermost loop.
-            EmitLoop(CurrentState.LoopStates.Peek().LoopStart);
+            EmitLoop(CurrentFunctionState.LoopStates.Peek().LoopStart);
         }
 
         private void BreakStatement()
         {
-            if (CurrentState.LoopStates.Count == 0)
+            if (CurrentFunctionState.LoopStates.Count == 0)
             {
                 throw new CompilerException(_previousToken, "Can't use 'continue' outside of a loop.");
             }
@@ -647,8 +665,8 @@ namespace LoxSharp.Core
             Consume(TokenType.SEMICOLON, "Expect ';' after 'break'.");
 
             // Discard any locals created inside the loop.
-            for (int i = CurrentState.LocalVars.Count - 1;
-                i >= 0 && CurrentState.LocalVars[i].Depth > CurrentState.LoopStates.Peek().ScopeDepth;
+            for (int i = CurrentFunctionState.LocalVars.Count - 1;
+                i >= 0 && CurrentFunctionState.LocalVars[i].Depth > CurrentFunctionState.LoopStates.Peek().ScopeDepth;
                 --i)
             {
                 EmitBytes((byte)OpCode.POP);
@@ -656,19 +674,19 @@ namespace LoxSharp.Core
 
 
             int exitJumpStart = EmitJump(OpCode.JUMP);
-            CurrentState.LoopStates.Peek().BreakJumpStarts.Add(exitJumpStart);    
+            CurrentFunctionState.LoopStates.Peek().BreakJumpStarts.Add(exitJumpStart);    
         }
 
         private void WhileStatement()
         {
-            Debug.Assert(CurrentState != null);
+            Debug.Assert(CurrentFunctionState != null);
 
-            CompilerState.LoopState loopState = new()
+            FunctionCompileState.LoopState loopState = new()
             {
                 LoopStart = CurrentChunk.Instructions.Count,
-                ScopeDepth = CurrentState.ScopeDepth
+                ScopeDepth = CurrentFunctionState.ScopeDepth
             };
-            CurrentState.LoopStates.Push(loopState); 
+            CurrentFunctionState.LoopStates.Push(loopState); 
 
             Consume(TokenType.LEFT_PAREN, "Expect '(' after 'while'.");
             Expression();
@@ -678,19 +696,19 @@ namespace LoxSharp.Core
 
             EmitBytes((byte)OpCode.POP);
             Statement();
-            EmitLoop(CurrentState.LoopStates.Peek().LoopStart);
+            EmitLoop(CurrentFunctionState.LoopStates.Peek().LoopStart);
 
 
             PatchJump(exitJumpStart);
             EmitBytes((byte)OpCode.POP);
 
             PatchLoopBreakJumps(loopState);
-            CurrentState.LoopStates.Pop();
+            CurrentFunctionState.LoopStates.Pop();
         }
 
         private void ForStatement()
         {
-            Debug.Assert(CurrentState != null);
+            Debug.Assert(CurrentFunctionState != null);
 
             BeginScope();   
             Consume(TokenType.LEFT_PAREN, "Expect '(' after 'for'.");
@@ -709,12 +727,12 @@ namespace LoxSharp.Core
                 ExpressionStatement();
             }
 
-            CompilerState.LoopState loopState = new()
+            FunctionCompileState.LoopState loopState = new()
             {
                 LoopStart = CurrentChunk.Instructions.Count,
-                ScopeDepth = CurrentState.ScopeDepth
+                ScopeDepth = CurrentFunctionState.ScopeDepth
             };
-            CurrentState.LoopStates.Push(loopState);
+            CurrentFunctionState.LoopStates.Push(loopState);
 
             // Second clause.
             int exitJump = -1;
@@ -737,13 +755,13 @@ namespace LoxSharp.Core
                 EmitBytes((byte)OpCode.POP);
                 Consume(TokenType.RIGHT_PAREN, "Expect ')' after for clauses.");
 
-                EmitLoop(CurrentState.LoopStates.Peek().LoopStart);
-                CurrentState.LoopStates.Peek().LoopStart = incrementStart;
+                EmitLoop(CurrentFunctionState.LoopStates.Peek().LoopStart);
+                CurrentFunctionState.LoopStates.Peek().LoopStart = incrementStart;
                 PatchJump(bodyJump);
             }
 
             Statement();    
-            EmitLoop(CurrentState.LoopStates.Peek().LoopStart);
+            EmitLoop(CurrentFunctionState.LoopStates.Peek().LoopStart);
 
             if (exitJump != -1)
             {
@@ -752,7 +770,7 @@ namespace LoxSharp.Core
             }
 
             PatchLoopBreakJumps(loopState);
-            CurrentState.LoopStates.Pop(); 
+            CurrentFunctionState.LoopStates.Pop(); 
             
             EndScope(); 
         }
@@ -832,7 +850,7 @@ namespace LoxSharp.Core
             EmitBytes((byte)OpCode.CLASS, nameConstIndex);
             DefineVariable(nameConstIndex);
 
-            CurrentState.ClassStates.Push(new CompilerState.ClassState());
+            _classStates.Push(new ClassCompileState());
 
             NamedVariable(className, false);
             Consume(TokenType.LEFT_BRACE, "Expect '{' before class body.");
@@ -845,7 +863,7 @@ namespace LoxSharp.Core
             Consume(TokenType.RIGHT_BRACE, "Expect '}' after class body.");
             EmitBytes((byte)OpCode.POP);
 
-            CurrentState.ClassStates.Pop();
+            _classStates.Pop();
         }
 
         private void ParsePrecedence(Precedence precedence)
@@ -882,7 +900,7 @@ namespace LoxSharp.Core
             Consume(TokenType.IDENTIFIER, errorMessage);
 
             DeclareVariable();
-            if (CurrentState.ScopeDepth > 0)
+            if (CurrentFunctionState.ScopeDepth > 0)
             {
                 return 0;
             }
@@ -902,8 +920,8 @@ namespace LoxSharp.Core
             {
                 do
                 {
-                    ++CurrentState.Function.Arity;
-                    if (CurrentState.Function.Arity > Byte.MaxValue)
+                    ++CurrentFunctionState.Function.Arity;
+                    if (CurrentFunctionState.Function.Arity > Byte.MaxValue)
                     {
                         throw new CompilerException(_previousToken, "Can't have more than 255 parameters.");
                     }
@@ -945,14 +963,17 @@ namespace LoxSharp.Core
             Consume(TokenType.IDENTIFIER, "Expect method name.");
             byte nameConstIndx = MakeConstant(new Value(_previousToken.Name));
 
-            ParseFunction(FunctionType.ClassMethod);
+            FunctionType functionType = _previousToken.Name == "init" ? 
+                FunctionType.Initialized : FunctionType.ClassMethod;
+
+            ParseFunction(functionType);
 
             EmitBytes((byte)OpCode.CLASS_METHOD, nameConstIndx);    
         }
 
         private void DefineVariable(byte global)
         {
-            if (CurrentState.ScopeDepth > 0)
+            if (CurrentFunctionState.ScopeDepth > 0)
             {
                 // mark variable initialized.
                 MarkLocalInitialized();
@@ -963,15 +984,15 @@ namespace LoxSharp.Core
 
         private void DeclareVariable()
         {
-            if (CurrentState.ScopeDepth == 0)
+            if (CurrentFunctionState.ScopeDepth == 0)
             {
                 return;
             }
 
-            for (int i = CurrentState.LocalVars.Count - 1; i >= 0; --i)
+            for (int i = CurrentFunctionState.LocalVars.Count - 1; i >= 0; --i)
             {
-                LocalVariabal local = CurrentState.LocalVars[i];
-                if (local.Depth != -1 && local.Depth < CurrentState.ScopeDepth)
+                LocalVariabal local = CurrentFunctionState.LocalVars[i];
+                if (local.Depth != -1 && local.Depth < CurrentFunctionState.ScopeDepth)
                 {
                     break;
                 }
@@ -987,27 +1008,27 @@ namespace LoxSharp.Core
 
         private void MarkLocalInitialized()
         {
-            if (CurrentState.ScopeDepth == 0)
+            if (CurrentFunctionState.ScopeDepth == 0)
             {
                 return;
             }
 
              // mark variable initialized.
-             CurrentState.LocalVars[CurrentState.LocalVars.Count - 1].Depth = CurrentState.ScopeDepth;
+             CurrentFunctionState.LocalVars[CurrentFunctionState.LocalVars.Count - 1].Depth = CurrentFunctionState.ScopeDepth;
         }
 
         private void AddLocalVariable(string variableName)
         {
-            if (CurrentState.LocalVars.Count == Byte.MaxValue + 1)
+            if (CurrentFunctionState.LocalVars.Count == Byte.MaxValue + 1)
             {
                 throw new CompilerException(_previousToken, "Too many local variables in function.");
             }
 
             LocalVariabal local = new(variableName, -1);
-            CurrentState.LocalVars.Add(local);
+            CurrentFunctionState.LocalVars.Add(local);
         }
 
-        private int ResolveLocalVar(CompilerState state, string varName)
+        private int ResolveLocalVar(FunctionCompileState state, string varName)
         {
             for (int i = state.LocalVars.Count - 1; i >= 0; --i)
             {

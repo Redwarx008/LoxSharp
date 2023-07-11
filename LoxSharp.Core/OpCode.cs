@@ -42,6 +42,7 @@ namespace LoxSharp.Core
         LOOP,
 
         CALL,
+        INVOKE,
         CLASS,
         CLASS_METHOD,
         RETURN

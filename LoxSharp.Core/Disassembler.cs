@@ -86,6 +86,8 @@ namespace LoxSharp.Core
                 case OpCode.SET_LOCAL:
                 case OpCode.CALL:
                     return ByteInstruction(instruction, chunk, offset);
+                case OpCode.INVOKE:
+                    return InvokeInstruction(instruction, chunk, offset);
                 case OpCode.GET_GLOBAL:
                 case OpCode.SET_GLOBAL:
                 case OpCode.GET_PROPERTY:
@@ -109,9 +111,18 @@ namespace LoxSharp.Core
         {
             byte constant = chunk.Instructions[offset + 1];
             _sb.Append($"{instruction.ToString(), -16}{constant, 4}");
-            _sb.Append($"{chunk.Constants[constant].ToString(), 10}");
+            _sb.Append($"    {chunk.Constants[constant].ToString()}");
             _sb.Append('\n');
             return offset + 2;  
+        }
+
+        private int InvokeInstruction(OpCode instruction, Chunk chunk, int offset)
+        {
+            byte constant = chunk.Instructions[offset + 1]; 
+            byte argCount = chunk.Instructions[offset + 2];
+            _sb.Append($"{instruction.ToString(),-16}({argCount,4}) args ");
+            _sb.Append($"{constant,4}\n");
+            return offset + 3;
         }
 
         private int SimpleInstruction(OpCode instruction, int offset)

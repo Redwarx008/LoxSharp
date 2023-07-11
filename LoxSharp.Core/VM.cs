@@ -212,6 +212,13 @@ namespace LoxSharp.Core
                             CallValue(in _stack.Peek(argCount), argCount);
                             break;
                         }
+                    case OpCode.INVOKE:
+                        {
+                            string methodName = ReadConstant(ref frame).AsString;
+                            int argCount = ReadByte(ref frame);
+                            Invoke(methodName, argCount); 
+                            break;
+                        }
                     case OpCode.RETURN:
                         {
                             Value result = _stack.Pop();
@@ -350,7 +357,38 @@ namespace LoxSharp.Core
             }
         }
 
-        private void Call(Function function, int argCount)
+        private void Invoke(string methodName, int argCount)
+        {
+            ref Value receiver = ref _stack.Peek(argCount);
+            if (!receiver.IsInstance)
+            {
+                ThrowRuntimeError("Only instances have methods.");
+            }
+            Instance instance = receiver.AsInstance;
+            if (instance.Fields.TryGetValue(methodName, out var field))
+            { 
+                _stack.Peek(argCount) = field;
+                CallValue(field, argCount);
+            }
+            else
+            {
+                InvokeFromClass(receiver.AsInstance.Class, methodName, argCount);
+            }
+        }
+
+        private void InvokeFromClass(InternalClass internalClass, string methodName, int argCount)
+        {
+            if (!internalClass.Methods.TryGetValue(methodName, out var method)) 
+            {
+                ThrowRuntimeError($"Undefined property {methodName}");
+            }
+            else
+            {
+                Call(method, argCount);
+            }
+        }
+
+        private void Call(in Function function, int argCount)
         {
             if (argCount != function.Arity)
             {
@@ -369,7 +407,17 @@ namespace LoxSharp.Core
         private void CreateInstance(InternalClass internalClass, int argCount)
         {
             Instance instance = new(internalClass);
-            _stack[_stack.Count - 1 - argCount] = new Value(instance);  
+            _stack[_stack.Count - 1 - argCount] = new Value(instance);
+
+            // call initializer
+            if (internalClass.Methods.TryGetValue("init", out var method))
+            {
+                Call(method, argCount);
+            }
+            else if (argCount != 0)
+            {
+                ThrowRuntimeError($"Expected 0 arguments but got {argCount}");
+            }
         }
 
         private void BindMethod(InternalClass internalClass, string methodName)
@@ -388,7 +436,7 @@ namespace LoxSharp.Core
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void ThrowRuntimeError(string message)
         {
-            string errorMsg = $"{message}\n";
+            string errorMsg = $"Runtime error : {message}\n";
             // print method call stack.
             for(int i = _callFrames.Count - 1; i >= 0; --i)
             {
