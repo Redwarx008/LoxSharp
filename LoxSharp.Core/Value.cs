@@ -1,11 +1,10 @@
-﻿using LoxSharp.Core.Utility;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 
 namespace LoxSharp.Core
 {
-    internal struct Value : IEquatable<Value>
+    public struct Value : IEquatable<Value>
     {
         private ValueType _type;
         private BasicData _data;
@@ -25,7 +24,7 @@ namespace LoxSharp.Core
         }
 
         [StructLayout(LayoutKind.Explicit)]
-        internal struct BasicData
+        public struct BasicData
         {
             [FieldOffset(0)]
             public double Double;
@@ -57,7 +56,7 @@ namespace LoxSharp.Core
                 return (string)_obj!;
             }
         }
-        public readonly Function AsFunction
+        internal readonly Function AsFunction
         {
             get
             {
@@ -73,12 +72,12 @@ namespace LoxSharp.Core
                 return (InternalClass)_obj!;
             }
         }
-        public readonly Instance AsInstance
+        public readonly ClassInstance AsInstance
         {
             get
             {
                 Debug.Assert(IsInstance);
-                return (Instance)_obj!;
+                return (ClassInstance)_obj!;
             }
         }
         public readonly BoundMethod AsBoundMethod
@@ -142,7 +141,7 @@ namespace LoxSharp.Core
             _obj = val;
         }
 
-        public Value(Instance val)
+        public Value(ClassInstance val)
         {
             _data = default;
             _type = ValueType.Instance;
@@ -245,7 +244,7 @@ namespace LoxSharp.Core
                     return "type not implemented";
             }
         }
-        public static Value operator +(Value a, Value b)
+        public static Value operator +(in Value a, in Value b)
         {
             if (a.IsNumber && b.IsNumber)
             {
@@ -262,7 +261,7 @@ namespace LoxSharp.Core
             return new Value();
         }
 
-        public static Value operator -(Value a, Value b)
+        public static Value operator -(in Value a, in Value b)
         {
             if (a.IsNumber && b.IsNumber)
             {
@@ -271,7 +270,7 @@ namespace LoxSharp.Core
             return new Value();
         }
 
-        public static Value operator *(Value a, Value b)
+        public static Value operator *(in Value a, in Value b)
         {
             if (a.IsNumber && b.IsNumber)
             {
@@ -280,7 +279,7 @@ namespace LoxSharp.Core
             return new Value();
         }
 
-        public static Value operator /(Value a, Value b)
+        public static Value operator /(in Value a, in Value b)
         {
             if (a.IsNumber && b.IsNumber)
             {
@@ -289,22 +288,22 @@ namespace LoxSharp.Core
             return new Value();
         }
 
-        public static Value operator ==(Value a, Value b)
+        public static Value operator ==(in Value a, in Value b)
         {
             return new Value(a.Equals(b));
         }
-        public static Value operator !=(Value a, Value b)
+        public static Value operator !=(in Value a, in Value b)
         {
             return !(a == b);
         }
 
-        public static Value operator !(Value val)
+        public static Value operator !(in Value val)
         {
             bool boolean = val.IsNull || (val.IsBool && val.AsBool == false);
             return new Value(boolean);
         }
 
-        public static Value operator >(Value a, Value b)
+        public static Value operator >(in Value a, in Value b)
         {
             if (a.IsNumber && b.IsNumber)
             {
@@ -313,7 +312,7 @@ namespace LoxSharp.Core
             return new Value();
         }
 
-        public static Value operator <(Value a, Value b)
+        public static Value operator <(in Value a, in Value b)
         {
             if (a.IsNumber && b.IsNumber)
             {

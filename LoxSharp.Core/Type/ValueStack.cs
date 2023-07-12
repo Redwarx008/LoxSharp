@@ -1,6 +1,6 @@
 ﻿using System.Runtime.CompilerServices;
 
-namespace LoxSharp.Core.Utility
+namespace LoxSharp.Core
 {
     internal class ValueStack<T> where T : struct
     {

@@ -4,7 +4,7 @@ namespace LoxSharp.Demo
 {
     internal class Program
     {
-        private static Interpreter interpreter = new Interpreter();
+        private static ScriptEngine interpreter = new ScriptEngine();
         static void Main(string[] args)
         {
 
@@ -53,10 +53,6 @@ namespace LoxSharp.Demo
                 Console.WriteLine(e.Message);
             }
             catch (RuntimeException e)
-            {
-                Console.WriteLine(e.Message);
-            }
-            catch (Exception e)
             {
                 Console.WriteLine(e.Message);
             }

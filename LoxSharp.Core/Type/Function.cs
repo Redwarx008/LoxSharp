@@ -1,4 +1,4 @@
-﻿namespace LoxSharp.Core.Utility
+﻿namespace LoxSharp.Core
 {
     internal class Function
     {

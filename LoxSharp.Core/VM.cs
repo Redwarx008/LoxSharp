@@ -25,15 +25,22 @@ namespace LoxSharp.Core
         private ValueStack<Value> _stack = new(FRAME_MAX * STACK_MAX);
         private List<Value> _globalValues = null!;
 
+        private List<byte> _currentInstructions = null!;
+        private List<Value> _currentConstants = null!;
+
+        public VM(List<Value> globalValues)
+        {
+            _globalValues = globalValues;
+        }
+
         public void Interpret(CompiledScript compiledScript)
         {
-            _globalValues = compiledScript.GlobalValues;
-
             _stack.Push(new Value(compiledScript.Main));
 
             CallFrame callframe = new(compiledScript.Main, 0);
+            _currentInstructions = callframe.Function.Chunk.Instructions;
+            _currentConstants = callframe.Function.Chunk.Constants;
             _callFrames.Push(callframe);
-
             Run();
         }
 
@@ -125,7 +132,7 @@ namespace LoxSharp.Core
                                 ThrowRuntimeError("Only instances have properties.");
                             }
 
-                            Instance instance = _stack.Peek().AsInstance;
+                            ClassInstance instance = _stack.Peek().AsInstance;
                             string propertyName = ReadConstant(ref frame).AsString;
                             if (instance.Fields.TryGetValue(propertyName, out var value))
                             {
@@ -144,7 +151,7 @@ namespace LoxSharp.Core
                                 ThrowRuntimeError("Only instances have fields.");
                             }
 
-                            Instance instance = _stack.Peek(1).AsInstance;
+                            ClassInstance instance = _stack.Peek(1).AsInstance;
                             string fieldName = ReadConstant(ref frame).AsString;
                             instance.Fields[fieldName] = _stack.Peek();
 
@@ -214,11 +221,14 @@ namespace LoxSharp.Core
                         {
                             Value result = _stack.Pop();
                             _callFrames.Pop();
+                            
                             if (_callFrames.Count == 0)
                             {
                                 _ = _stack.Pop();
                                 return;
                             }
+                            _currentInstructions = _callFrames.Peek().Function.Chunk.Instructions;
+                            _currentConstants = _callFrames.Peek().Function.Chunk.Constants;
                             _stack.Discard(_stack.Count - frame.StackStart);
                             _stack.Push(result);
                             break;
@@ -247,21 +257,21 @@ namespace LoxSharp.Core
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private byte ReadByte(ref CallFrame callFrame)
         {
-            return callFrame.Function.Chunk.Instructions[callFrame.Ip++];
+            return _currentInstructions[callFrame.Ip++];
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private ushort ReadUShort(ref CallFrame callFrame)
         {
-            var high = callFrame.Function.Chunk.Instructions[callFrame.Ip++];
-            var low = callFrame.Function.Chunk.Instructions[callFrame.Ip++];
+            var high = _currentInstructions[callFrame.Ip++];
+            var low = _currentInstructions[callFrame.Ip++];
             return (ushort)(high << 8 | low);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private Value ReadConstant(ref CallFrame callFrame)
         {
-            return callFrame.Function.Chunk.Constants[ReadByte(ref callFrame)];
+            return _currentConstants[ReadByte(ref callFrame)];
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -355,7 +365,7 @@ namespace LoxSharp.Core
             {
                 ThrowRuntimeError("Only instances have methods.");
             }
-            Instance instance = receiver.AsInstance;
+            ClassInstance instance = receiver.AsInstance;
             if (instance.Fields.TryGetValue(methodName, out var field))
             {
                 _stack.Peek(argCount) = field;
@@ -392,12 +402,14 @@ namespace LoxSharp.Core
             }
 
             CallFrame callFrame = new(function, _stack.Count - argCount - 1);
+            _currentInstructions = callFrame.Function.Chunk.Instructions;
+            _currentConstants = callFrame.Function.Chunk.Constants;
             _callFrames.Push(callFrame);
         }
 
         private void CreateInstance(InternalClass internalClass, int argCount)
         {
-            Instance instance = new(internalClass);
+            ClassInstance instance = new(internalClass);
             _stack.Peek(argCount) = new Value(instance);
 
             // call initializer

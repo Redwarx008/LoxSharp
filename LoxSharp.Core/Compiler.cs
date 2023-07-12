@@ -1,4 +1,4 @@
-﻿using LoxSharp.Core.Utility;
+using LoxSharp.Core.Utility;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
@@ -103,18 +103,17 @@ namespace LoxSharp.Core
         private Stack<ClassCompileState> _classStates;
 
         private FunctionCompileState CurrentFunctionState => _functionStates.Peek();
-        private ClassCompileState CurrentClassState => _classStates.Peek();
         private Chunk CurrentChunk => CurrentFunctionState.Function.Chunk;
 
-        private Dictionary<string, int> _globalNameToIndex;
+        private Dictionary<string, int> _globalValueIndexs;
         private List<Value> _globalValues;
 
-        public Compiler()
+        public Compiler(List<Value> globalValues, Dictionary<string, int> globalValueIndexs)
         {
             _classStates = new Stack<ClassCompileState>();
             _functionStates = new Stack<FunctionCompileState>();
-            _globalNameToIndex = new Dictionary<string, int>();
-            _globalValues = new List<Value>();
+            _globalValueIndexs = globalValueIndexs;
+            _globalValues = globalValues;
 
             _rules = new ParseRule[Enum.GetValues(typeof(TokenType)).Length];
 
@@ -172,11 +171,16 @@ namespace LoxSharp.Core
             }
 
             Function topFunction = EndCompilerState();
-            return new CompiledScript(topFunction, _globalValues);
+            CompiledScript compiled = new(topFunction);
+            Reset();
+            return compiled;
         }
 
-        public void Reset()
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void Reset()
         {
+            _currentToken = default;
+            _previousToken = default;
             _tokenIndex = 0;
             _tokens = null;
         }
@@ -208,7 +212,7 @@ namespace LoxSharp.Core
             FunctionCompileState compilerState = new(functionType);
             if (functionType != FunctionType.Script)
             {
-                compilerState.Function.Name = _previousToken.Name;
+                compilerState.Function.Name = _previousToken.Lexeme;
             }
 
             _functionStates.Push(compilerState);
@@ -366,18 +370,18 @@ namespace LoxSharp.Core
         }
         private void Number(bool canAssign)
         {
-            double value = (double)_previousToken.Literal!;
+            double value = Double.Parse(_previousToken.Lexeme);
             EmitConstant(new Value(value));
         }
 
         private void String(bool canAssign)
         {
-            EmitConstant(new Value((string)_previousToken.Literal!));
+            EmitConstant(new Value(_previousToken.Lexeme));
         }
 
         private void Variable(bool canAssign)
         {
-            NamedVariable(_previousToken.Name, canAssign);
+            NamedVariable(_previousToken.Lexeme, canAssign);
         }
 
         private void NamedVariable(string variableName, bool canAssign)
@@ -478,7 +482,7 @@ namespace LoxSharp.Core
         private void Dot(bool canAssign)
         {
             Consume(TokenType.IDENTIFIER, "Expect property name after '.'.");
-            byte nameConstIndex = MakeConstant(new Value(_previousToken.Name));
+            byte nameConstIndex = MakeConstant(new Value(_previousToken.Lexeme));
 
             if (canAssign && Match(TokenType.EQUAL))
             {
@@ -844,8 +848,8 @@ namespace LoxSharp.Core
         private void ClassDeclaration()
         {
             Consume(TokenType.IDENTIFIER, "Expect class name.");
-            string className = _previousToken.Name;
-            byte nameConstIndex = MakeConstant(new Value(_previousToken.Name));
+            string className = _previousToken.Lexeme;
+            byte nameConstIndex = MakeConstant(new Value(_previousToken.Lexeme));
             DeclareVariable();
 
             EmitBytes((byte)OpCode.CLASS, nameConstIndex);
@@ -906,7 +910,7 @@ namespace LoxSharp.Core
                 return 0;
             }
 
-            return MakeIdentifierIndex(_previousToken.Name);
+            return MakeIdentifierIndex(_previousToken.Lexeme);
         }
 
         private void ParseFunction(FunctionType functionType)
@@ -962,9 +966,9 @@ namespace LoxSharp.Core
         private void ParseClassMethod()
         {
             Consume(TokenType.IDENTIFIER, "Expect method name.");
-            byte nameConstIndx = MakeConstant(new Value(_previousToken.Name));
+            byte nameConstIndx = MakeConstant(new Value(_previousToken.Lexeme));
 
-            FunctionType functionType = _previousToken.Name == "init" ?
+            FunctionType functionType = _previousToken.Lexeme == "init" ?
                 FunctionType.Initialized : FunctionType.ClassMethod;
 
             ParseFunction(functionType);
@@ -998,13 +1002,13 @@ namespace LoxSharp.Core
                     break;
                 }
 
-                if (_previousToken.Name == local.Name)
+                if (_previousToken.Lexeme == local.Name)
                 {
                     throw new CompilerException(_previousToken, "Already a variable with this name in this scope.");
                 }
             }
 
-            AddLocalVariable(_previousToken.Name);
+            AddLocalVariable(_previousToken.Lexeme);
         }
 
         private void MarkLocalInitialized()
@@ -1020,14 +1024,27 @@ namespace LoxSharp.Core
 
         private byte MakeIdentifierIndex(string name)
         {
-            if (_globalNameToIndex.TryGetValue(name, out var index))
+            if (_globalValueIndexs.TryGetValue(name, out var index))
             {
                 return (byte)index;
             }
 
             int newIndex = _globalValues.Count;
             _globalValues.Add(Value.NewUndefined(name));
-            _globalNameToIndex.Add(name, newIndex);
+            _globalValueIndexs.Add(name, newIndex);
+            return (byte)newIndex;
+        }
+
+        private byte MakeIdentifierConstant(string name)
+        {
+            if (_globalValueIndexs.TryGetValue(name, out var index))
+            {
+                return (byte)index;
+            }
+
+            int newIndex = _globalValues.Count;
+            _globalValues.Add(Value.NewUndefined(name));
+            _globalValueIndexs.Add(name, newIndex);
             return (byte)newIndex;
         }
 

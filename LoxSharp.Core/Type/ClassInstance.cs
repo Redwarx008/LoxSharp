@@ -1,12 +1,12 @@
 ﻿namespace LoxSharp.Core
 {
-    internal class Instance
+    internal class ClassInstance
     {
         public InternalClass Class { get; private set; }
 
         public Dictionary<string, Value> Fields { get; private set; }
 
-        public Instance(InternalClass internalClass)
+        public ClassInstance(InternalClass internalClass)
         {
             Fields = new Dictionary<string, Value>();
             Class = internalClass;

@@ -12,7 +12,7 @@ namespace LoxSharp.Core
 
         private int _start = 0;
         private int _current = 0;
-        private int _line = 0;
+        private int _line = 1;
 
         static Scanner()
         {
@@ -39,17 +39,11 @@ namespace LoxSharp.Core
 
         public Scanner()
         {
-        }
 
-        public void Reset()
-        {
-            _tokens.Clear();
-            _line = 0;
-            _current = 0;
-            _start = 0;
         }
         public List<Token> Scan(string source)
         {
+            _tokens = new List<Token>();
             _source = source;
             while (!IsAtEnd())
             {
@@ -57,9 +51,21 @@ namespace LoxSharp.Core
                 _start = _current;
                 ScanToken();
             }
-            _tokens.Add(new Token(TokenType.EOF, "", null, _line));
-            return _tokens;
+            _tokens.Add(new Token(TokenType.EOF, string.Empty, _line));
+            List<Token> tokens = _tokens;
+            Reset();
+            return tokens;
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void Reset()
+        {
+            _line = 1;
+            _current = 0;
+            _start = 0;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void ScanToken()
         {
             char c = Advance();
@@ -163,7 +169,7 @@ namespace LoxSharp.Core
             {
                 ++_current;
             }
-            AddToken(TokenType.NUMBER, Double.Parse(_source!.Substring(_start, _current - _start)));
+            AddToken(TokenType.NUMBER);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -184,8 +190,8 @@ namespace LoxSharp.Core
             // The closing ".
             ++_current;
             // Trim the surrounding quotes.
-            string value = _source!.Substring(_start + 1, _current - 1 - (_start + 1));
-            AddToken(TokenType.STRING, value);
+            string str = _source!.Substring(_start + 1, _current - 1 - (_start + 1));
+            _tokens.Add(new Token(TokenType.STRING, str, _line));  
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -204,14 +210,8 @@ namespace LoxSharp.Core
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void AddToken(TokenType type)
         {
-            AddToken(type, null);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void AddToken(TokenType type, object? literal)
-        {
             string name = _source!.Substring(_start, _current - _start);
-            _tokens.Add(new Token(type, name, literal, _line));
+            _tokens.Add(new Token(type, name, _line));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
