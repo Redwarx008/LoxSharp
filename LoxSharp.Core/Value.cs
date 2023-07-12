@@ -4,6 +4,9 @@ using System.Runtime.InteropServices;
 
 namespace LoxSharp.Core
 {
+
+    public delegate bool HostFunctionDelegate(VM vm, out Value result);
+
     public struct Value : IEquatable<Value>
     {
         private ValueType _type;
@@ -17,7 +20,8 @@ namespace LoxSharp.Core
             Bool,
             Double,
             String,
-            Function,
+            InternalFunction,
+            HostFunction,
             Class,
             Instance,
             BoundMethod,
@@ -64,7 +68,7 @@ namespace LoxSharp.Core
                 return (Function)_obj!;
             }
         }
-        public readonly InternalClass AsClass
+        internal readonly InternalClass AsClass
         {
             get
             {
@@ -72,7 +76,7 @@ namespace LoxSharp.Core
                 return (InternalClass)_obj!;
             }
         }
-        public readonly ClassInstance AsInstance
+        internal readonly ClassInstance AsInstance
         {
             get
             {
@@ -80,7 +84,7 @@ namespace LoxSharp.Core
                 return (ClassInstance)_obj!;
             }
         }
-        public readonly BoundMethod AsBoundMethod
+        internal readonly BoundMethod AsBoundMethod
         {
             get
             {
@@ -88,20 +92,28 @@ namespace LoxSharp.Core
                 return (BoundMethod)_obj!;
             }
         }
+        public readonly HostFunctionDelegate AsHostFunction
+        {
+            get
+            {
+                Debug.Assert(IsHostFunction);
+                return (HostFunctionDelegate)_obj!;
+            }
+        }
 
 
-        public readonly ValueType Type => _type;
+        internal readonly ValueType Type => _type;
 
-        public readonly bool IsUndefined => _type == ValueType.Undefined;
+        internal readonly bool IsUndefined => _type == ValueType.Undefined;
         public readonly bool IsNull => _type == ValueType.Null;
         public readonly bool IsBool => _type == ValueType.Bool;
         public readonly bool IsNumber => _type == ValueType.Double;
         public readonly bool IsString => _type == ValueType.String;
-        public readonly bool IsFunction => _type == ValueType.Function;
-        public readonly bool IsClass => _type == ValueType.Class;
-        public readonly bool IsInstance => _type == ValueType.Instance;
-        public readonly bool IsBoundMethod => _type == ValueType.BoundMethod;
-
+        internal readonly bool IsFunction => _type == ValueType.InternalFunction;
+        internal readonly bool IsClass => _type == ValueType.Class;
+        internal readonly bool IsInstance => _type == ValueType.Instance;
+        internal readonly bool IsBoundMethod => _type == ValueType.BoundMethod;
+        public readonly bool IsHostFunction => _type == ValueType.HostFunction;
         public Value(double val)
         {
             _data = new BasicData()
@@ -127,28 +139,28 @@ namespace LoxSharp.Core
             _obj = val;
         }
 
-        public Value(Function val)
+        internal Value(Function val)
         {
             _data = default;
-            _type = ValueType.Function;
+            _type = ValueType.InternalFunction;
             _obj = val;
         }
 
-        public Value(InternalClass val)
+        internal Value(InternalClass val)
         {
             _data = default;
             _type = ValueType.Class;
             _obj = val;
         }
 
-        public Value(ClassInstance val)
+        internal Value(ClassInstance val)
         {
             _data = default;
             _type = ValueType.Instance;
             _obj = val;
         }
 
-        public Value(BoundMethod val)
+        internal Value(BoundMethod val)
         {
             _data = default;
             _type = ValueType.BoundMethod;
@@ -176,7 +188,7 @@ namespace LoxSharp.Core
                     return AsDouble == other.AsDouble;
                 case ValueType.String:
                     return AsString == other.AsString;
-                case ValueType.Function:
+                case ValueType.InternalFunction:
                     return AsFunction == other.AsFunction;
                 case ValueType.Class:
                     return AsClass == other.AsClass;
@@ -209,7 +221,7 @@ namespace LoxSharp.Core
                     return AsDouble.GetHashCode();
                 case ValueType.Null:
                 case ValueType.String:
-                case ValueType.Function:
+                case ValueType.InternalFunction:
                 case ValueType.Class:
                 case ValueType.Instance:
                 case ValueType.BoundMethod:
@@ -232,7 +244,7 @@ namespace LoxSharp.Core
                     return AsDouble.ToString();
                 case ValueType.String:
                     return $"'{AsString}'";
-                case ValueType.Function:
+                case ValueType.InternalFunction:
                     return AsFunction.ToString();
                 case ValueType.Class:
                     return AsClass.ToString();
@@ -330,6 +342,8 @@ namespace LoxSharp.Core
                 _data = default
             };
         }
+
+        public static explicit operator HostFunctionDelegate(Value val) => (HostFunctionDelegate)val._obj!;
 
     }
 }

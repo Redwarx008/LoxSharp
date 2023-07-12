@@ -38,6 +38,19 @@ namespace LoxSharp.Core
 
         public void SetGlobal(string name, Value value)
         {
+            if(_globalValuesIndexs.ContainsKey(name))
+            {
+                throw new ExtensionException($"A Global variable named {name} already exists ");
+            }
+            else
+            {
+                int index = _globalValues.Count;
+                _globalValues[index] = value;
+            }
+        }
+
+        public void AddGlobalFunction(string name, HostFunctionDelegate hostFunction)
+        {
 
         }
 

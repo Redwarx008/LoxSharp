@@ -1,5 +1,4 @@
-﻿using LoxSharp.Core.Utility;
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 
 namespace LoxSharp.Core
 {
@@ -16,7 +15,7 @@ namespace LoxSharp.Core
         }
     }
 
-    internal class VM
+    public class VM
     {
         private const int STACK_MAX = 256;
         private const int FRAME_MAX = 64;
@@ -33,7 +32,7 @@ namespace LoxSharp.Core
             _globalValues = globalValues;
         }
 
-        public void Interpret(CompiledScript compiledScript)
+        internal void Interpret(CompiledScript compiledScript)
         {
             _stack.Push(new Value(compiledScript.Main));
 
@@ -227,8 +226,10 @@ namespace LoxSharp.Core
                                 _ = _stack.Pop();
                                 return;
                             }
+
                             _currentInstructions = _callFrames.Peek().Function.Chunk.Instructions;
                             _currentConstants = _callFrames.Peek().Function.Chunk.Constants;
+
                             _stack.Discard(_stack.Count - frame.StackStart);
                             _stack.Push(result);
                             break;
@@ -341,7 +342,7 @@ namespace LoxSharp.Core
         {
             switch (callee.Type)
             {
-                case Value.ValueType.Function:
+                case Value.ValueType.InternalFunction:
                     Call(callee.AsFunction, argCount);
                     break;
                 case Value.ValueType.BoundMethod:
