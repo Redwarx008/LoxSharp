@@ -213,6 +213,10 @@ namespace LoxSharp.Core
             {
                 compilerState.Function.Name = _previousToken.Lexeme;
             }
+            else
+            {
+                compilerState.Function.Name = "Main";
+            }
 
             _functionStates.Push(compilerState);
         }
@@ -222,7 +226,7 @@ namespace LoxSharp.Core
         {
 #if DEBUG
             Disassembler disassembler = Disassembler.Instance;
-            disassembler.DisassembleChunk(_functionStates.Peek().Function.Chunk, CurrentFunctionState.Function.Name ?? "Main");
+            disassembler.DisassembleFunction(_functionStates.Peek().Function, _globalValues);
             Console.Write(disassembler.GetText());
 #endif
             EmitReturn();
@@ -567,11 +571,7 @@ namespace LoxSharp.Core
         }
         private void Statement()
         {
-            if (Match(TokenType.PRINT))
-            {
-                PrintStatement();
-            }
-            else if (Match(TokenType.IF))
+            if (Match(TokenType.IF))
             {
                 IfStatement();
             }
@@ -606,14 +606,6 @@ namespace LoxSharp.Core
                 ExpressionStatement();
             }
         }
-
-        private void PrintStatement()
-        {
-            Expression();
-            Consume(TokenType.SEMICOLON, "Expect ';' after value.");
-            EmitBytes((byte)OpCode.PRINT);
-        }
-
         private void ReturnStatement()
         {
             if (CurrentFunctionState.FunctionType == FunctionType.Script)
@@ -1029,20 +1021,7 @@ namespace LoxSharp.Core
             }
 
             int newIndex = _globalValues.Count;
-            _globalValues.Add(Value.NewUndefined(name));
-            _globalValueIndexs.Add(name, newIndex);
-            return (byte)newIndex;
-        }
-
-        private byte MakeIdentifierConstant(string name)
-        {
-            if (_globalValueIndexs.TryGetValue(name, out var index))
-            {
-                return (byte)index;
-            }
-
-            int newIndex = _globalValues.Count;
-            _globalValues.Add(Value.NewUndefined(name));
+            _globalValues.Add(Value.Undefined(name));
             _globalValueIndexs.Add(name, newIndex);
             return (byte)newIndex;
         }

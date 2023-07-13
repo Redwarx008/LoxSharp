@@ -1,5 +1,4 @@
-﻿using LoxSharp.Core.Utility;
-using System.Text;
+﻿using System.Text;
 
 namespace LoxSharp.Core
 {
@@ -22,13 +21,13 @@ namespace LoxSharp.Core
             return txt;
         }
 
-        public void DisassembleChunk(Chunk chunk, string name)
+        public void DisassembleFunction(Function function, List<Value> globalValues)
         {
             _sb.Clear();
-            _sb.Append($"== {name} ==\n");
-            for (int offset = 0; offset < chunk.Instructions.Count;)
+            _sb.Append($"== {function.Name} ==\n");
+            for (int offset = 0; offset < function.Chunk.Instructions.Count;)
             {
-                offset = DisassembleInstruction(chunk, offset);
+                offset = DisassembleInstruction(function.Chunk, offset, globalValues);
             }
         }
 
@@ -42,7 +41,7 @@ namespace LoxSharp.Core
             _sb.Append('\n');
         }
 
-        public int DisassembleInstruction(Chunk chunk, int offset)
+        public int DisassembleInstruction(Chunk chunk, int offset, List<Value> globalValues)
         {
             // offset
             _sb.Append(offset.ToString("0000"));
@@ -75,7 +74,6 @@ namespace LoxSharp.Core
                 case OpCode.DIVIDE:
                 case OpCode.NOT:
                 case OpCode.NEGATE:
-                case OpCode.PRINT:
                 case OpCode.RETURN:
                     return SimpleInstruction(instruction, offset);
                 case OpCode.GET_LOCAL:
@@ -86,9 +84,10 @@ namespace LoxSharp.Core
                     return InvokeInstruction(instruction, chunk, offset);
                 case OpCode.GET_GLOBAL:
                 case OpCode.SET_GLOBAL:
+                case OpCode.DEFINE_GLOBAL:
+                    return GlobalValueInstruction(instruction, chunk, offset, globalValues);
                 case OpCode.GET_PROPERTY:
                 case OpCode.SET_PROPERTY:
-                case OpCode.DEFINE_GLOBAL:
                 case OpCode.CLASS:
                 case OpCode.CLASS_METHOD:
                     return ConstantInstruction(instruction, chunk, offset);
@@ -143,6 +142,15 @@ namespace LoxSharp.Core
 
             _sb.Append($"{instruction.ToString(),-16}{offset,4} -> {offset + 3 + direction * jump}\n");
             return offset + 3;
+        }
+
+        private int GlobalValueInstruction(OpCode instruction, Chunk chunk, int offset, List<Value> globalValues) 
+        {
+            byte index = chunk.Instructions[offset + 1];
+            _sb.Append($"{instruction.ToString(),-16}{index,4}");
+            _sb.Append($"    {globalValues[index].ToString()}");
+            _sb.Append('\n');
+            return offset + 2;
         }
     }
 }

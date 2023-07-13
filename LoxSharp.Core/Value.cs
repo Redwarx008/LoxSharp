@@ -4,9 +4,6 @@ using System.Runtime.InteropServices;
 
 namespace LoxSharp.Core
 {
-
-    public delegate bool HostFunctionDelegate(VM vm, out Value result);
-
     public struct Value : IEquatable<Value>
     {
         private ValueType _type;
@@ -92,12 +89,12 @@ namespace LoxSharp.Core
                 return (BoundMethod)_obj!;
             }
         }
-        public readonly HostFunctionDelegate AsHostFunction
+        internal readonly HostFunction AsHostFunction
         {
             get
             {
                 Debug.Assert(IsHostFunction);
-                return (HostFunctionDelegate)_obj!;
+                return (HostFunction)_obj!;
             }
         }
 
@@ -109,7 +106,7 @@ namespace LoxSharp.Core
         public readonly bool IsBool => _type == ValueType.Bool;
         public readonly bool IsNumber => _type == ValueType.Double;
         public readonly bool IsString => _type == ValueType.String;
-        internal readonly bool IsFunction => _type == ValueType.InternalFunction;
+        public readonly bool IsFunction => _type == ValueType.InternalFunction;
         internal readonly bool IsClass => _type == ValueType.Class;
         internal readonly bool IsInstance => _type == ValueType.Instance;
         internal readonly bool IsBoundMethod => _type == ValueType.BoundMethod;
@@ -167,6 +164,13 @@ namespace LoxSharp.Core
             _obj = val;
         }
 
+        internal Value(HostFunction val)
+        {
+            _data = default;
+            _type= ValueType.HostFunction;  
+            _obj = val; 
+        }
+
         public Value()
         {
             _data = default;
@@ -196,6 +200,8 @@ namespace LoxSharp.Core
                     return AsInstance == other.AsInstance;
                 case ValueType.BoundMethod:
                     return AsBoundMethod == other.AsBoundMethod;
+                case ValueType.HostFunction:
+                    return AsHostFunction == other.AsHostFunction;
                 case ValueType.Null:
                     return true;
                 default: return false; // Unreachable.
@@ -225,6 +231,7 @@ namespace LoxSharp.Core
                 case ValueType.Class:
                 case ValueType.Instance:
                 case ValueType.BoundMethod:
+                case ValueType.HostFunction:
                 default:
                     return _obj!.GetHashCode();
             }
@@ -252,6 +259,8 @@ namespace LoxSharp.Core
                     return AsInstance.ToString();
                 case ValueType.BoundMethod:
                     return AsBoundMethod.ToString();
+                case ValueType.HostFunction:
+                    return AsHostFunction.ToString();   
                 default:
                     return "type not implemented";
             }
@@ -333,7 +342,7 @@ namespace LoxSharp.Core
             return new Value();
         }
 
-        public static Value NewUndefined(string name)
+        public static Value Undefined(string name)
         {
             return new Value
             {
@@ -342,8 +351,5 @@ namespace LoxSharp.Core
                 _data = default
             };
         }
-
-        public static explicit operator HostFunctionDelegate(Value val) => (HostFunctionDelegate)val._obj!;
-
     }
 }

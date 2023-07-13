@@ -29,8 +29,6 @@
 
         NEGATE,
 
-        PRINT,
-
         JUMP_IF_FALSE,
         JUMP,
         LOOP,

@@ -4,6 +4,7 @@ namespace LoxSharp.Core
 {
     internal struct CallFrame
     {
+        public InternalClass? Class { get; set; } = null;
         public Function Function { get; private set; }
         public int Ip { get; set; } = 0;
         public int StackStart { get; private set; }
@@ -54,7 +55,7 @@ namespace LoxSharp.Core
                 if (disassembler != null)
                 {
                     disassembler.DisassembleStack(_stack);
-                    disassembler.DisassembleInstruction(frame.Function.Chunk, frame.Ip);
+                    disassembler.DisassembleInstruction(frame.Function.Chunk, frame.Ip, _globalValues);
                     Console.Write(disassembler.GetText());
                 }
 #endif
@@ -178,9 +179,6 @@ namespace LoxSharp.Core
                             ThrowRuntimeError("Operand must be a number.");
                         }
                         _stack.Push(new Value(-_stack.Pop().AsDouble));
-                        break;
-                    case OpCode.PRINT:
-                        Console.WriteLine(_stack.Pop().ToString());
                         break;
                     case OpCode.JUMP:
                         {
@@ -338,12 +336,12 @@ namespace LoxSharp.Core
             }
         }
 
-        private void CallValue(in Value callee, int argCount)
+        private void CallValue(in Value callee, int argCount, InternalClass? scriptClass = null)
         {
             switch (callee.Type)
             {
                 case Value.ValueType.InternalFunction:
-                    Call(callee.AsFunction, argCount);
+                    Call(callee.AsFunction, argCount, scriptClass);
                     break;
                 case Value.ValueType.BoundMethod:
                     BoundMethod boundMethod = callee.AsBoundMethod;
@@ -352,6 +350,9 @@ namespace LoxSharp.Core
                     break;
                 case Value.ValueType.Class:
                     CreateInstance(callee.AsClass, argCount);
+                    break;
+                case Value.ValueType.HostFunction:
+                    CallHost(callee.AsHostFunction, argCount);  
                     break;
                 default:
                     ThrowRuntimeError("Can only call functions and classes.");
@@ -370,7 +371,7 @@ namespace LoxSharp.Core
             if (instance.Fields.TryGetValue(methodName, out var field))
             {
                 _stack.Peek(argCount) = field;
-                CallValue(field, argCount);
+                CallValue(field, argCount, instance.Class);
             }
             else
             {
@@ -386,11 +387,11 @@ namespace LoxSharp.Core
             }
             else
             {
-                Call(method, argCount);
+                Call(method, argCount, internalClass);
             }
         }
 
-        private void Call(in Function function, int argCount)
+        private void Call(in Function function, int argCount, in InternalClass? scriptClass = null)
         {
             if (argCount != function.Arity)
             {
@@ -402,7 +403,7 @@ namespace LoxSharp.Core
                 ThrowRuntimeError("Stack overflow.");
             }
 
-            CallFrame callFrame = new(function, _stack.Count - argCount - 1);
+            CallFrame callFrame = new(function, _stack.Count - argCount - 1) { Class = scriptClass };
             _currentInstructions = callFrame.Function.Chunk.Instructions;
             _currentConstants = callFrame.Function.Chunk.Constants;
             _callFrames.Push(callFrame);
@@ -416,7 +417,7 @@ namespace LoxSharp.Core
             // call initializer
             if (internalClass.Methods.TryGetValue("init", out var method))
             {
-                Call(method, argCount);
+                Call(method, argCount, internalClass);
             }
             else if (argCount != 0)
             {
@@ -437,6 +438,20 @@ namespace LoxSharp.Core
             }
         }
 
+        private void CallHost(HostFunction function, int argCount)
+        {
+            Value[] args = new Value[argCount];
+            for (int i = 0; i < argCount; ++i)
+            {
+                args[i] = _stack.Peek(argCount - (i + 1));
+            }
+
+            Value result = function.Function.Invoke(args);
+
+            _stack.Discard(argCount + 1);
+            _stack.Push(result);
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void ThrowRuntimeError(string message)
         {
@@ -454,10 +469,32 @@ namespace LoxSharp.Core
                 }
                 else
                 {
-                    errorMsg += $"{function.Name}\n";
+                    if (frame.Class != null)
+                    {
+                        errorMsg += $"{frame.Class.Name}.{function.Name}\n";
+                    }
+                    else
+                    {
+                        errorMsg += $"{function.Name}\n";
+                    }  
                 }
             }
             throw new RuntimeException(errorMsg);
+        }
+        #endregion
+
+        #region External call 
+        public void CallFunction(in Value callee, params Value[] args)
+        {
+            _stack.Push(callee);    
+
+            for(int i = 0; i < args.Length; ++i)
+            {
+                _stack.Push(args[i]);   
+            }
+
+            CallValue(callee, args.Length);
+            Run();
         }
         #endregion
     }

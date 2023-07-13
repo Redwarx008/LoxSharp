@@ -32,4 +32,13 @@
 // }
 // print sum;
 
-print "dddd" + 5555;
+// fun Test()
+// {
+//     log("hello world");
+// }
+fun Test(str)
+{
+    log(str);
+}
+
+

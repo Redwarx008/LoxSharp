@@ -1,6 +1,4 @@
-﻿using LoxSharp.Core.Utility;
-
-namespace LoxSharp.Core
+﻿namespace LoxSharp.Core
 {
     internal class CompiledScript
     {

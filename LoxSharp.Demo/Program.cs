@@ -4,7 +4,7 @@ namespace LoxSharp.Demo
 {
     internal class Program
     {
-        private static ScriptEngine interpreter = new ScriptEngine();
+        private static ScriptEngine engine = new ScriptEngine();
         static void Main(string[] args)
         {
 
@@ -38,11 +38,17 @@ namespace LoxSharp.Demo
                 Run(line);
             }
         }
-        private static void Run(String source)
+        private static void Run(string source)
         {
+            engine.AddGlobalFunction("log", (Value[] args) =>
+            {
+                Console.Write(args[0]);
+                return new Value();
+            });
             try
             {
-                interpreter.Run(source);
+                engine.Run(source);
+                engine.CallFunction("Test", new Value("hello world"));
             }
             catch (ScannerException e)
             {
@@ -56,6 +62,10 @@ namespace LoxSharp.Demo
             {
                 Console.WriteLine(e.Message);
             }
+            //catch (Exception e) 
+            //{ 
+            //    Console.WriteLine(e.Message);
+            //}
         }
     }
 }
