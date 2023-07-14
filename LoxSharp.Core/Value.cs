@@ -19,6 +19,7 @@ namespace LoxSharp.Core
             String,
             InternalFunction,
             HostFunction,
+            HostMethod,
             Class,
             Instance,
             BoundMethod,
@@ -97,6 +98,14 @@ namespace LoxSharp.Core
                 return (HostFunction)_obj!;
             }
         }
+        internal readonly HostMethod AsHostMethod
+        {
+            get
+            {
+                Debug.Assert(IsHostMethod);
+                return (HostMethod)_obj!;
+            }
+        }
 
 
         internal readonly ValueType Type => _type;
@@ -111,6 +120,7 @@ namespace LoxSharp.Core
         internal readonly bool IsInstance => _type == ValueType.Instance;
         internal readonly bool IsBoundMethod => _type == ValueType.BoundMethod;
         public readonly bool IsHostFunction => _type == ValueType.HostFunction;
+        public readonly bool IsHostMethod => _type == ValueType.HostMethod;
         public Value(double val)
         {
             _data = new BasicData()
@@ -169,6 +179,13 @@ namespace LoxSharp.Core
             _data = default;
             _type= ValueType.HostFunction;  
             _obj = val; 
+        }
+
+        internal Value(HostMethod val)
+        {
+            _data = default;
+            _type= ValueType.HostMethod;
+            _obj = val;
         }
 
         public Value()
@@ -232,6 +249,7 @@ namespace LoxSharp.Core
                 case ValueType.Instance:
                 case ValueType.BoundMethod:
                 case ValueType.HostFunction:
+                case ValueType.HostMethod:
                 default:
                     return _obj!.GetHashCode();
             }
@@ -260,7 +278,9 @@ namespace LoxSharp.Core
                 case ValueType.BoundMethod:
                     return AsBoundMethod.ToString();
                 case ValueType.HostFunction:
-                    return AsHostFunction.ToString();   
+                    return AsHostFunction.ToString();
+                case ValueType.HostMethod:
+                    return AsHostMethod.ToString();
                 default:
                     return "type not implemented";
             }

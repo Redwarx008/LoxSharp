@@ -48,7 +48,7 @@ namespace LoxSharp.Demo
             try
             {
                 engine.Run(source);
-                engine.CallFunction("Test", new Value("hello world"));
+                //engine.CallFunction("Test", new Value("hello world"));
             }
             catch (ScannerException e)
             {

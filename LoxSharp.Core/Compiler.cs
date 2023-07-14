@@ -399,7 +399,7 @@ namespace LoxSharp.Core
             }
             else
             {
-                index = MakeIdentifierIndex(variableName);
+                index = GetIdentifierIndex(variableName);
                 getOp = OpCode.GET_GLOBAL;
                 setOp = OpCode.SET_GLOBAL;
             }
@@ -844,7 +844,7 @@ namespace LoxSharp.Core
             DeclareVariable();
 
             EmitBytes((byte)OpCode.CLASS, nameConstIndex);
-            DefineVariable(nameConstIndex);
+            DefineVariable(GetIdentifierIndex(className));
 
             _classStates.Push(new ClassCompileState());
 
@@ -901,7 +901,7 @@ namespace LoxSharp.Core
                 return 0;
             }
 
-            return MakeIdentifierIndex(_previousToken.Lexeme);
+            return GetIdentifierIndex(_previousToken.Lexeme);
         }
 
         private void ParseFunction(FunctionType functionType)
@@ -1013,7 +1013,7 @@ namespace LoxSharp.Core
             CurrentFunctionState.LocalVars[CurrentFunctionState.LocalVars.Count - 1].Depth = CurrentFunctionState.ScopeDepth;
         }
 
-        private byte MakeIdentifierIndex(string name)
+        private byte GetIdentifierIndex(string name)
         {
             if (_globalValueIndexs.TryGetValue(name, out var index))
             {

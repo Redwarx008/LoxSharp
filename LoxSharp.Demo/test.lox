@@ -36,9 +36,23 @@
 // {
 //     log("hello world");
 // }
-fun Test(str)
+// fun Test(str)
+// {
+//     log(str);
+// }
+
+class Test
 {
-    log(str);
+    init()
+    {
+        this.name = "jianglei";
+    }
+    fudd()
+    {
+        this.tttt = 555;
+    }
 }
 
-
+var a = Test();
+a.fudd();
+// log (a.tttt);

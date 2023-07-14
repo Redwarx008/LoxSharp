@@ -141,7 +141,7 @@ namespace LoxSharp.Core
                             }
 
                             // if property is a method
-                            BindMethod(instance.Class, propertyName);
+                            CreateBindMethod(instance.Class, propertyName);
                             break;
                         }
                     case OpCode.SET_PROPERTY:
@@ -153,12 +153,20 @@ namespace LoxSharp.Core
 
                             ClassInstance instance = _stack.Peek(1).AsInstance;
                             string fieldName = ReadConstant(ref frame).AsString;
-                            instance.Fields[fieldName] = _stack.Peek();
 
-                            // remove the second element from the stack.
-                            Value val = _stack.Pop();
-                            _stack.Pop();
-                            _stack.Push(val);
+                            if (instance.Fields.ContainsKey(fieldName) || frame.Function.Name == "init")
+                            {
+                                instance.Fields[fieldName] = _stack.Peek();
+
+                                // remove the second element from the stack.
+                                Value val = _stack.Pop();
+                                _stack.Pop();
+                                _stack.Push(val);
+                            }
+                            else
+                            {
+                                ThrowRuntimeError($"undefined property {fieldName}");
+                            }
                             break;
                         }
                     case OpCode.EQUAL:
@@ -241,9 +249,9 @@ namespace LoxSharp.Core
                     case OpCode.CLASS_METHOD:
                         {
                             string methodName = ReadConstant(ref frame).AsString;
-                            Value method = _stack.Peek();
+                            ref readonly Value method = ref _stack.Peek();
                             InternalClass internalClass = _stack.Peek(1).AsClass;
-                            internalClass.Methods[methodName] = method.AsFunction;
+                            internalClass.Methods[methodName] = method;
                             _stack.Pop();
                             break;
                         }
@@ -341,18 +349,16 @@ namespace LoxSharp.Core
             switch (callee.Type)
             {
                 case Value.ValueType.InternalFunction:
-                    Call(callee.AsFunction, argCount, scriptClass);
+                    CallInternalFunction(callee.AsFunction, argCount, scriptClass);
                     break;
                 case Value.ValueType.BoundMethod:
-                    BoundMethod boundMethod = callee.AsBoundMethod;
-                    _stack.Peek(argCount) = boundMethod.Receiver;
-                    Call(boundMethod.Function, argCount);
+                    CallBoundMethod(callee.AsBoundMethod, argCount);
                     break;
                 case Value.ValueType.Class:
                     CreateInstance(callee.AsClass, argCount);
                     break;
                 case Value.ValueType.HostFunction:
-                    CallHost(callee.AsHostFunction, argCount);  
+                    CallHostFunction(callee.AsHostFunction, argCount);  
                     break;
                 default:
                     ThrowRuntimeError("Can only call functions and classes.");
@@ -383,15 +389,23 @@ namespace LoxSharp.Core
         {
             if (!internalClass.Methods.TryGetValue(methodName, out var method))
             {
-                ThrowRuntimeError($"Undefined property {methodName}");
+                ThrowRuntimeError($"Undefined method {methodName}");
             }
             else
             {
-                Call(method, argCount, internalClass);
+                switch (method.Type) 
+                {
+                    case Value.ValueType.InternalFunction:
+                        CallInternalFunction(method.AsFunction, argCount, internalClass);
+                        break;
+                    case Value.ValueType.HostFunction:
+                        CallHostFunction(method.AsHostFunction, argCount);
+                        break;
+                }
             }
         }
 
-        private void Call(in Function function, int argCount, in InternalClass? scriptClass = null)
+        private void CallInternalFunction(in Function function, int argCount, in InternalClass? scriptClass = null)
         {
             if (argCount != function.Arity)
             {
@@ -408,6 +422,20 @@ namespace LoxSharp.Core
             _currentConstants = callFrame.Function.Chunk.Constants;
             _callFrames.Push(callFrame);
         }
+        private void CallBoundMethod(BoundMethod boundMethod, int argCount)
+        {
+            _stack.Peek(argCount) = boundMethod.Receiver;
+
+            switch (boundMethod.Function.Type)
+            {
+                case Value.ValueType.InternalFunction:
+                    CallInternalFunction(boundMethod.Function.AsFunction, argCount);
+                    break;
+                case Value.ValueType.HostFunction:
+                    CallHostFunction(boundMethod.Function.AsHostFunction, argCount);
+                    break;
+            }
+        }
 
         private void CreateInstance(InternalClass internalClass, int argCount)
         {
@@ -417,7 +445,15 @@ namespace LoxSharp.Core
             // call initializer
             if (internalClass.Methods.TryGetValue("init", out var method))
             {
-                Call(method, argCount, internalClass);
+                switch (method.Type)
+                {
+                    case Value.ValueType.InternalFunction:
+                        CallInternalFunction(method.AsFunction, argCount, internalClass);
+                        break;
+                    case Value.ValueType.HostFunction:
+                        CallHostFunction(method.AsHostFunction, argCount);
+                        break;
+                }
             }
             else if (argCount != 0)
             {
@@ -425,11 +461,11 @@ namespace LoxSharp.Core
             }
         }
 
-        private void BindMethod(InternalClass internalClass, string methodName)
+        private void CreateBindMethod(InternalClass internalClass, string methodName)
         {
             if (!internalClass.Methods.TryGetValue(methodName, out var method))
             {
-                ThrowRuntimeError($"Undefined property '{methodName}'");
+                ThrowRuntimeError($"Undefined method '{methodName}'");
             }
             else
             {
@@ -438,7 +474,7 @@ namespace LoxSharp.Core
             }
         }
 
-        private void CallHost(HostFunction function, int argCount)
+        private void CallHostFunction(HostFunction function, int argCount)
         {
             Value[] args = new Value[argCount];
             for (int i = 0; i < argCount; ++i)

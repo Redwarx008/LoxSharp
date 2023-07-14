@@ -1,15 +1,15 @@
 ﻿namespace LoxSharp.Core
 {
-    internal class InternalClass
+    public class InternalClass
     {
         public string Name { get; private set; }
 
-        public Dictionary<string, Function> Methods { get; private set; }
+        public Dictionary<string, Value> Methods { get; private set; }
 
         public InternalClass(string name)
         {
             Name = name;
-            Methods = new Dictionary<string, Function>();
+            Methods = new Dictionary<string, Value>();
         }
 
         public override string ToString()
