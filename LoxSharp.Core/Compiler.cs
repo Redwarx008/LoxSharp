@@ -120,6 +120,8 @@ namespace LoxSharp.Core
             _rules[(int)TokenType.RIGHT_PAREN] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.LEFT_BRACE] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.RIGHT_BRACE] = new ParseRule(null, null, Precedence.None);
+            _rules[(int)TokenType.LEFT_BRACKET] = new ParseRule(BracketCreate, BracketIndex, Precedence.Call);
+            _rules[(int)TokenType.RIGHT_BRACKET] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.COMMA] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.DOT] = new ParseRule(null, Dot, Precedence.Call);
             _rules[(int)TokenType.MINUS] = new ParseRule(Unary, Binary, Precedence.Term);
@@ -331,7 +333,7 @@ namespace LoxSharp.Core
         [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
         private void EmitConstant(Value val)
         {
-            EmitBytes((byte)OpCode.CONSTANT, MakeConstant(val));
+            EmitBytes((byte)OpCode.CONSTANT_8, MakeConstant(val));
         }
 
         [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
@@ -539,6 +541,44 @@ namespace LoxSharp.Core
             }
 
             Variable(false);
+        }
+
+        private void BracketCreate(bool canAssign)
+        {
+            int arrayIndex = _globalValueIndexs[nameof(Array)];
+            EmitBytes((byte)OpCode.GET_GLOBAL, (byte)arrayIndex);
+            // initialization list
+            byte argCount = 0;
+            if (!Check(TokenType.RIGHT_BRACKET))
+            {
+                do
+                {
+                    Expression();
+                    if (argCount > Byte.MaxValue)
+                    {
+                        throw new CompilerException(_previousToken, "Can't have more than 255 initializer.");
+                    }
+                    ++argCount;
+                } while (Match(TokenType.COMMA));
+            }
+            Consume(TokenType.RIGHT_BRACKET, "Expect ']' after initialization list.");
+
+            EmitBytes((byte)OpCode.CALL, argCount);
+        }
+
+        private void BracketIndex(bool canAssign)
+        {
+            Expression();
+            Consume(TokenType.RIGHT_BRACKET, "Expect ']' after index.");
+            if (canAssign && Match(TokenType.EQUAL))
+            {
+                Expression();
+                EmitBytes((byte)OpCode.SET_INDEX);
+            }
+            else
+            {
+                EmitBytes((byte)OpCode.GET_INDEX);
+            }
         }
 
         #endregion

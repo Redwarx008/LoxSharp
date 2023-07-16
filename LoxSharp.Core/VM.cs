@@ -63,7 +63,7 @@ namespace LoxSharp.Core
 
                 switch (instruction)
                 {
-                    case OpCode.CONSTANT:
+                    case OpCode.CONSTANT_8:
                         Value constant = ReadConstant(ref frame);
                         _stack.Push(constant);
                         break;
@@ -169,6 +169,58 @@ namespace LoxSharp.Core
                             }
                             break;
                         }
+                    case OpCode.GET_INDEX:
+                        {
+                            switch(_stack.Peek(1).AsObject)
+                            {
+                                case ArrayInstance arrayInstance:
+                                    {
+                                        if (!_stack.Peek().IsNumber)
+                                        {
+                                            ThrowRuntimeError("Expects a number to use as an index.");
+                                        }
+                                        double index = _stack.Peek().AsDouble;
+                                        _stack.Discard(2);
+                                        _stack.Push(arrayInstance.Values[(int)index]);
+                                        break;
+                                    }
+                                // todo map
+                                default:
+                                    ThrowRuntimeError("Only arrays and maps can use index.");
+                                    break;
+                            }
+                            break;  
+                        }
+                    case OpCode.SET_INDEX:
+                        {
+                            switch (_stack.Peek(2).AsObject)
+                            {
+                                case ArrayInstance arrayInstance:
+                                    {
+                                        if (!_stack.Peek(1).IsNumber)
+                                        {
+                                            ThrowRuntimeError("Expects a number to use as an index.");
+                                        }
+                                        double index = _stack.Peek(1).AsDouble;
+
+                                        if (index >= arrayInstance.Values.Count)
+                                        {
+                                            ThrowRuntimeError("Array index out of bounds.");
+                                        }
+
+                                        ref Value val = ref _stack.Peek();
+                                        _stack.Discard(3);
+                                        arrayInstance.Values[(int)index] = val; 
+                                        _stack.Push(val);
+                                        break;
+                                    }
+                                    // todo map
+                                    default :
+                                    ThrowRuntimeError("Only arrays and maps can use index.");
+                                    break;
+                            }
+                            break;
+                        }
                     case OpCode.EQUAL:
                     case OpCode.GREATER:
                     case OpCode.LESS:
@@ -186,7 +238,8 @@ namespace LoxSharp.Core
                         {
                             ThrowRuntimeError("Operand must be a number.");
                         }
-                        _stack.Push(new Value(-_stack.Pop().AsDouble));
+                        // _stack.Push(new Value(-_stack.Pop().AsDouble));
+                        _stack.Peek() = new Value(-_stack.Peek().AsDouble);
                         break;
                     case OpCode.JUMP:
                         {
@@ -381,7 +434,22 @@ namespace LoxSharp.Core
             }
             else
             {
-                InvokeFromClass(receiver.AsInstance.Class, methodName, argCount);
+                if (!instance.Class.Methods.TryGetValue(methodName, out var method))
+                {
+                    ThrowRuntimeError($"Undefined method {methodName}");
+                }
+                else
+                {
+                    switch (method.Type)
+                    {
+                        case Value.ValueType.InternalFunction:
+                            CallInternalFunction(method.AsFunction, argCount, instance.Class);
+                            break;
+                        case Value.ValueType.HostMethod:
+                            CallHostMethod(instance, method.AsHostMethod, argCount);
+                            break;
+                    }
+                }
             }
         }
 
@@ -398,7 +466,7 @@ namespace LoxSharp.Core
                     case Value.ValueType.InternalFunction:
                         CallInternalFunction(method.AsFunction, argCount, internalClass);
                         break;
-                    case Value.ValueType.HostFunction:
+                    case Value.ValueType.HostMethod:
                         CallHostFunction(method.AsHostFunction, argCount);
                         break;
                 }
@@ -431,15 +499,17 @@ namespace LoxSharp.Core
                 case Value.ValueType.InternalFunction:
                     CallInternalFunction(boundMethod.Function.AsFunction, argCount);
                     break;
-                case Value.ValueType.HostFunction:
-                    CallHostFunction(boundMethod.Function.AsHostFunction, argCount);
+                case Value.ValueType.HostMethod:
+                    CallHostMethod(boundMethod.Receiver.AsInstance, boundMethod.Function.AsHostMethod, argCount);
                     break;
             }
         }
 
         private void CreateInstance(InternalClass internalClass, int argCount)
         {
-            ClassInstance instance = new(internalClass);
+
+            ClassInstance instance = internalClass.CreateInstance();
+ 
             _stack.Peek(argCount) = new Value(instance);
 
             // call initializer
@@ -450,8 +520,8 @@ namespace LoxSharp.Core
                     case Value.ValueType.InternalFunction:
                         CallInternalFunction(method.AsFunction, argCount, internalClass);
                         break;
-                    case Value.ValueType.HostFunction:
-                        CallHostFunction(method.AsHostFunction, argCount);
+                    case Value.ValueType.HostMethod:
+                        CallHostMethod(instance, method.AsHostMethod, argCount);
                         break;
                 }
             }
@@ -465,7 +535,7 @@ namespace LoxSharp.Core
         {
             if (!internalClass.Methods.TryGetValue(methodName, out var method))
             {
-                ThrowRuntimeError($"Undefined method '{methodName}'");
+                ThrowRuntimeError($"Undefined property '{methodName}'");
             }
             else
             {
@@ -488,6 +558,20 @@ namespace LoxSharp.Core
             _stack.Push(result);
         }
 
+        private void CallHostMethod(ClassInstance instance, HostMethod method, int argCount)
+        {
+            Value[] args = new Value[argCount];
+            for (int i = 0; i < argCount; ++i)
+            {
+                args[i] = _stack.Peek(argCount - (i + 1));
+            }
+
+            Value result = method.Method.Invoke(instance, args);
+
+            _stack.Discard(argCount + 1);
+            _stack.Push(result);
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void ThrowRuntimeError(string message)
         {
@@ -497,7 +581,7 @@ namespace LoxSharp.Core
             {
                 ref readonly CallFrame frame = ref _callFrames[i];
                 Function function = frame.Function;
-                int line = function.Chunk.LineNumbers[frame.Ip - 1];
+                int line = function.Chunk.GetLineNumber(frame.Ip - 1);
                 errorMsg += $"[Line {line}] in ";
                 if (function.Name == null)
                 {

@@ -2,7 +2,8 @@
 {
     internal enum OpCode : byte
     {
-        CONSTANT,
+        CONSTANT_8,
+        CONSTANT_16,
 
         NIL,
         TRUE,
@@ -16,6 +17,8 @@
         SET_GLOBAL,
         GET_PROPERTY,
         SET_PROPERTY,
+        GET_INDEX,
+        SET_INDEX,
 
         EQUAL,
         GREATER,

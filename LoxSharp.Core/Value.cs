@@ -106,7 +106,13 @@ namespace LoxSharp.Core
                 return (HostMethod)_obj!;
             }
         }
-
+        internal readonly object? AsObject
+        {
+            get
+            {
+                return _obj;
+            }
+        }
 
         internal readonly ValueType Type => _type;
 
@@ -371,5 +377,7 @@ namespace LoxSharp.Core
                 _data = default
             };
         }
+
+        public static Value Null => new Value();
     }
 }

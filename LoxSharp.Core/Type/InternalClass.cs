@@ -12,6 +12,8 @@
             Methods = new Dictionary<string, Value>();
         }
 
+        public virtual ClassInstance CreateInstance() => new ClassInstance(this);
+
         public override string ToString()
         {
             return $"<<{Name}>>";

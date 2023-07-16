@@ -47,19 +47,19 @@ namespace LoxSharp.Core
             _sb.Append(offset.ToString("0000"));
 
             // line number
-            if (offset > 0 && chunk.LineNumbers[offset] == chunk.LineNumbers[offset - 1])
+            if (offset > 0 && chunk.GetLineNumber(offset) == chunk.GetLineNumber(offset - 1))
             {
                 _sb.Append("   | ");
             }
             else
             {
-                _sb.Append($"{chunk.LineNumbers[offset],4} ");
+                _sb.Append($"{chunk.GetLineNumber(offset),4} ");
             }
 
             OpCode instruction = (OpCode)chunk.Instructions[offset];
             switch (instruction)
             {
-                case OpCode.CONSTANT:
+                case OpCode.CONSTANT_8:
                     return ConstantInstruction(instruction, chunk, offset);
                 case OpCode.NIL:
                 case OpCode.TRUE:
@@ -75,6 +75,8 @@ namespace LoxSharp.Core
                 case OpCode.NOT:
                 case OpCode.NEGATE:
                 case OpCode.RETURN:
+                case OpCode.SET_INDEX:
+                case OpCode.GET_INDEX:
                     return SimpleInstruction(instruction, offset);
                 case OpCode.GET_LOCAL:
                 case OpCode.SET_LOCAL:

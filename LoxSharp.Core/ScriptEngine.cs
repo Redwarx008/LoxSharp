@@ -17,6 +17,9 @@ namespace LoxSharp.Core
 
             _scanner = new();
             _compiler = new(_globalValues, _globalValuesIndexs);
+
+            _globalValuesIndexs[nameof(Array)] = 0;
+            _globalValues.Add(new Value(new Array()));
         }
 
         public void Run(string src)
