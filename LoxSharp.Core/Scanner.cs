@@ -4,9 +4,7 @@ namespace LoxSharp.Core
 {
     internal class Scanner
     {
-        private string? _source;
-
-        private List<Token> _tokens = new();
+        private string _source;
 
         private static Dictionary<string, TokenType> _keyWords;
 
@@ -37,22 +35,17 @@ namespace LoxSharp.Core
             _keyWords["break"] = TokenType.BREAK;
         }
 
-        public Scanner()
+        public Scanner(string source)
         {
-
-        }
-        public List<Token> Scan(string source)
-        {
-            _tokens = new List<Token>();
             _source = source;
+        }
+        public List<Token> ScanSource()
+        {
+            var tokens = new List<Token>();
             while (!IsAtEnd())
             {
-                // We are at the beginning of the next lexeme.
-                _start = _current;
-                ScanToken();
+                tokens.Add(ScanToken());
             }
-            _tokens.Add(new Token(TokenType.EOF, string.Empty, _line));
-            List<Token> tokens = _tokens;
             Reset();
             return tokens;
         }
@@ -66,79 +59,98 @@ namespace LoxSharp.Core
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void ScanToken()
+        private Token ScanToken()
         {
+            SkipWhitespace();
+
+            // We are at the beginning of the next lexeme.
+            _start = _current;
+            if (IsAtEnd()) 
+            { 
+                return MakeToken(TokenType.EOF);
+            }
+
             char c = Advance();
             switch (c)
             {
-                case '(': AddToken(TokenType.LEFT_PAREN); break;
-                case ')': AddToken(TokenType.RIGHT_PAREN); break;
-                case '{': AddToken(TokenType.LEFT_BRACE); break;
-                case '}': AddToken(TokenType.RIGHT_BRACE); break;
-                case '[': AddToken(TokenType.LEFT_BRACKET);break;
-                case ']': AddToken(TokenType.RIGHT_BRACKET); break;
-                case ',': AddToken(TokenType.COMMA); break;
-                case '.': AddToken(TokenType.DOT); break;
-                case '-': AddToken(TokenType.MINUS); break;
-                case '+': AddToken(TokenType.PLUS); break;
-                case ';': AddToken(TokenType.SEMICOLON); break;
-                case '*': AddToken(TokenType.STAR); break;
+                case '(': return MakeToken(TokenType.LEFT_PAREN);
+                case ')': return MakeToken(TokenType.RIGHT_PAREN);
+                case '{': return MakeToken(TokenType.LEFT_BRACE);
+                case '}': return MakeToken(TokenType.RIGHT_BRACE);
+                case '[': return MakeToken(TokenType.LEFT_BRACKET);
+                case ']': return MakeToken(TokenType.RIGHT_BRACKET);
+                case ',': return MakeToken(TokenType.COMMA);
+                case '.': return MakeToken(TokenType.DOT);
+                case '-': return MakeToken(TokenType.MINUS);
+                case '+': return MakeToken(TokenType.PLUS);
+                case ';': return MakeToken(TokenType.SEMICOLON);
+                case '*': return MakeToken(TokenType.STAR);
+                case '/': return MakeToken(TokenType.SLASH);
                 case '!':
-                    AddToken(Match('=') ? TokenType.BANG_EQUAL : TokenType.BANG);
-                    break;
+                    return MakeToken(Match('=') ? TokenType.BANG_EQUAL : TokenType.BANG);
                 case '=':
-                    AddToken(Match('=') ? TokenType.EQUAL_EQUAL : TokenType.EQUAL);
-                    break;
+                    return MakeToken(Match('=') ? TokenType.EQUAL_EQUAL : TokenType.EQUAL);
                 case '<':
-                    AddToken(Match('=') ? TokenType.LESS_EQUAL : TokenType.LESS);
-                    break;
+                    return MakeToken(Match('=') ? TokenType.LESS_EQUAL : TokenType.LESS);
                 case '>':
-                    AddToken(Match('=') ? TokenType.GREATER_EQUAL : TokenType.GREATER);
-                    break;
-                case '/':
-                    if (Match('/'))
-                    {
-                        // A comment goes until the end of the line.
-                        while (!IsAtEnd() && _source![_current] != '\n')
-                        {
-                            //Advance();
-                            ++_current;
-                        }
-                    }
-                    else
-                    {
-                        AddToken(TokenType.SLASH);
-                    }
-                    break;
-                case ' ':
-                case '\r':
-                case '\t':
-                    break;
-                case '\n':
-                    ++_line;
-                    break;
+                    return MakeToken(Match('=') ? TokenType.GREATER_EQUAL : TokenType.GREATER);
                 case '"':
-                    ComsumeString();
-                    break;
+                    return MakeString();
                 default:
                     if (IsDigit(c))
                     {
-                        ComsumeNumber();
+                        return MakeNumber();
                     }
                     else if (IsAlpha(c))
                     {
-                        ComsumeIdentifier();
+                        return MakeIdentifier();
                     }
                     else
                     {
                         throw new ScannerException(_line, "Unexpected character.");
                     }
-                    break;
+            }
+        }
+
+        private void SkipWhitespace()
+        {
+            while (true) 
+            {
+                char c = Peek();
+                switch(c)
+                {
+                    case '/':
+                        if (Match('/'))
+                        {
+                            // A comment goes until the end of the line.
+                            while (!IsAtEnd() && _source![_current] != '\n')
+                            {
+                                //Advance();
+                                ++_current;
+                            }
+                        }
+                        else
+                        {
+                            return;
+                        }
+                        break;
+                    case ' ':
+                    case '\r':
+                    case '\t':
+                        ++_current;
+                        break;
+                    case '\n':
+                        ++_line;
+                        ++_current;
+                        break;
+                    default:
+                        return;
+                }
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void ComsumeIdentifier()
+        private Token MakeIdentifier()
         {
             while (IsAlphaNumeric(Peek()))
             {
@@ -151,11 +163,11 @@ namespace LoxSharp.Core
             {
                 type = TokenType.IDENTIFIER;
             }
-            AddToken(type);
+            return MakeToken(type);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void ComsumeNumber()
+        private Token MakeNumber()
         {
             while (IsDigit(Peek()))
             {
@@ -171,11 +183,11 @@ namespace LoxSharp.Core
             {
                 ++_current;
             }
-            AddToken(TokenType.NUMBER);
+            return MakeToken(TokenType.NUMBER);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void ComsumeString()
+        private Token MakeString()
         {
             while (!IsAtEnd() && _source![_current] != '"')
             {
@@ -193,7 +205,7 @@ namespace LoxSharp.Core
             ++_current;
             // Trim the surrounding quotes.
             string str = _source!.Substring(_start + 1, _current - 1 - (_start + 1));
-            _tokens.Add(new Token(TokenType.STRING, str, _line));  
+            return new Token(TokenType.STRING, str, _line);  
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -210,10 +222,10 @@ namespace LoxSharp.Core
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void AddToken(TokenType type)
+        private Token MakeToken(TokenType type)
         {
             string name = _source!.Substring(_start, _current - _start);
-            _tokens.Add(new Token(type, name, _line));
+            return new Token(type, name, _line);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

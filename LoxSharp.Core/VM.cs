@@ -535,7 +535,7 @@ namespace LoxSharp.Core
         {
             if (!internalClass.Methods.TryGetValue(methodName, out var method))
             {
-                ThrowRuntimeError($"Undefined property '{methodName}'");
+                ThrowRuntimeError($"Undefined method '{methodName}'");
             }
             else
             {

@@ -6,6 +6,14 @@ namespace LoxSharp.Core
     using ParseFunc = Action<bool>;
     internal class Compiler
     {
+        private class Parser
+        {
+            public Token Previous { get; set; }
+            public Token Current { get; set; }  
+            public int TokenIndex { get; set; }
+
+        }
+
         private enum FunctionType
         {
             Function,
@@ -159,9 +167,9 @@ namespace LoxSharp.Core
             _rules[(int)TokenType.EOF] = new ParseRule(null, null, Precedence.None);
         }
 
-        public CompiledScript Compile(List<Token> tokens)
+        public CompiledScript Compile(string source)
         {
-            _tokens = tokens;
+            _tokens = new Scanner(source).ScanSource();
 
             BeginCompilerState(FunctionType.Script);
 
@@ -236,8 +244,9 @@ namespace LoxSharp.Core
         }
 
         #region utility method
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void Advance()
+        public void Advance()
         {
             Debug.Assert(_tokens != null);
 
