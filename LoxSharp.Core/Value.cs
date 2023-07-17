@@ -4,11 +4,11 @@ using System.Runtime.InteropServices;
 
 namespace LoxSharp.Core
 {
-    public struct Value : IEquatable<Value>
+    public readonly struct Value : IEquatable<Value>
     {
-        private ValueType _type;
-        private BasicData _data;
-        private object? _obj = null;
+        private readonly ValueType _type;
+        private readonly BasicData _data;
+        private readonly object? _obj = null;
 
         internal enum ValueType
         {
@@ -21,6 +21,7 @@ namespace LoxSharp.Core
             HostFunction,
             HostMethod,
             Class,
+            Module,
             Instance,
             BoundMethod,
         }
@@ -74,6 +75,14 @@ namespace LoxSharp.Core
                 return (InternalClass)_obj!;
             }
         }
+        internal readonly Module AsModule
+        {
+            get
+            {
+                Debug.Assert(IsModule);
+                return (Module)_obj!;
+            }
+        }
         internal readonly ClassInstance AsInstance
         {
             get
@@ -123,6 +132,7 @@ namespace LoxSharp.Core
         public readonly bool IsString => _type == ValueType.String;
         public readonly bool IsFunction => _type == ValueType.InternalFunction;
         internal readonly bool IsClass => _type == ValueType.Class;
+        internal readonly bool IsModule => _type == ValueType.Module;
         internal readonly bool IsInstance => _type == ValueType.Instance;
         internal readonly bool IsBoundMethod => _type == ValueType.BoundMethod;
         public readonly bool IsHostFunction => _type == ValueType.HostFunction;
@@ -165,6 +175,13 @@ namespace LoxSharp.Core
             _type = ValueType.Class;
             _obj = val;
         }
+        
+        internal Value(Module val)
+        {
+            _data = default;
+            _type = ValueType.Module;
+            _obj = val;
+        }
 
         internal Value(ClassInstance val)
         {
@@ -201,6 +218,13 @@ namespace LoxSharp.Core
             _obj = null;
         }
 
+        private Value(BasicData data, ValueType type, object obj)
+        {
+            _data = data;
+            _type = type;
+            _obj = obj;
+        }
+
         public bool Equals(Value other)
         {
             if (_type != other._type)
@@ -219,6 +243,8 @@ namespace LoxSharp.Core
                     return AsFunction == other.AsFunction;
                 case ValueType.Class:
                     return AsClass == other.AsClass;
+                case ValueType.Module:
+                    return AsModule == other.AsModule;
                 case ValueType.Instance:
                     return AsInstance == other.AsInstance;
                 case ValueType.BoundMethod:
@@ -370,12 +396,7 @@ namespace LoxSharp.Core
 
         public static Value Undefined(string name)
         {
-            return new Value
-            {
-                _type = ValueType.Undefined,
-                _obj = name,
-                _data = default
-            };
+            return new Value(default, ValueType.Undefined, name);
         }
 
         public static Value Null => new Value();

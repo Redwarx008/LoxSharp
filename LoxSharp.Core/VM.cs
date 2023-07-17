@@ -28,7 +28,9 @@ namespace LoxSharp.Core
         private List<byte> _currentInstructions = null!;
         private List<Value> _currentConstants = null!;
 
-        public VM(List<Value> globalValues)
+        internal Dictionary<string, Module> Modules { get; private set; }
+
+        public VM()
         {
             _globalValues = globalValues;
         }
@@ -64,10 +66,18 @@ namespace LoxSharp.Core
                 switch (instruction)
                 {
                     case OpCode.CONSTANT_8:
-                        Value constant = ReadConstant(ref frame);
-                        _stack.Push(constant);
-                        break;
-                    case OpCode.NIL:
+                        {
+                            Value constant = ReadConstant8(ref frame);
+                            _stack.Push(constant);
+                            break;
+                        }
+                    case OpCode.CONSTANT_16:
+                        {
+                            Value constant = ReadConstant16(ref frame);
+                            _stack.Push(constant);
+                            break;
+                        }
+                    case OpCode.NULL:
                         _stack.Push(new Value());
                         break;
                     case OpCode.TRUE:
@@ -81,25 +91,25 @@ namespace LoxSharp.Core
                         break;
                     case OpCode.GET_LOCAL:
                         {
-                            int slot = ReadByte(ref frame) + frame.StackStart;
+                            int slot = ReadUShort(ref frame) + frame.StackStart;
                             _stack.Push(_stack[slot]);
                             break;
                         }
                     case OpCode.SET_LOCAL:
                         {
-                            int slot = ReadByte(ref frame) + frame.StackStart;
+                            int slot = ReadUShort(ref frame) + frame.StackStart;
                             _stack[slot] = _stack.Peek();
                             break;
                         }
                     case OpCode.DEFINE_GLOBAL:
                         {
-                            byte index = ReadByte(ref frame);
+                            int index = ReadUShort(ref frame);
                             _globalValues[index] = _stack.Pop();
                             break;
                         }
                     case OpCode.GET_GLOBAL:
                         {
-                            byte index = ReadByte(ref frame);
+                            int index = ReadUShort(ref frame);
                             Value val = _globalValues[index];
                             if (val.IsUndefined)
                             {
@@ -113,7 +123,7 @@ namespace LoxSharp.Core
                         }
                     case OpCode.SET_GLOBAL:
                         {
-                            byte index = ReadByte(ref frame);
+                            int index = ReadUShort(ref frame);
                             Value val = _globalValues[index];
                             if (val.IsUndefined)
                             {
@@ -133,7 +143,7 @@ namespace LoxSharp.Core
                             }
 
                             ClassInstance instance = _stack.Peek().AsInstance;
-                            string propertyName = ReadConstant(ref frame).AsString;
+                            string propertyName = ReadConstant16(ref frame).AsString;
                             if (instance.Fields.TryGetValue(propertyName, out var value))
                             {
                                 _stack[_stack.Count - 1] = value;
@@ -152,7 +162,7 @@ namespace LoxSharp.Core
                             }
 
                             ClassInstance instance = _stack.Peek(1).AsInstance;
-                            string fieldName = ReadConstant(ref frame).AsString;
+                            string fieldName = ReadConstant16(ref frame).AsString;
 
                             if (instance.Fields.ContainsKey(fieldName) || frame.Function.Name == "init")
                             {
@@ -270,7 +280,7 @@ namespace LoxSharp.Core
                         }
                     case OpCode.INVOKE:
                         {
-                            string methodName = ReadConstant(ref frame).AsString;
+                            string methodName = ReadConstant16(ref frame).AsString;
                             int argCount = ReadByte(ref frame);
                             Invoke(methodName, argCount);
                             break;
@@ -295,13 +305,13 @@ namespace LoxSharp.Core
                         }
                     case OpCode.CLASS:
                         {
-                            string className = ReadConstant(ref frame).AsString;
+                            string className = ReadConstant16(ref frame).AsString;
                             _stack.Push(new Value(new InternalClass(className)));
                             break;
                         }
                     case OpCode.CLASS_METHOD:
                         {
-                            string methodName = ReadConstant(ref frame).AsString;
+                            string methodName = ReadConstant16(ref frame).AsString;
                             ref readonly Value method = ref _stack.Peek();
                             InternalClass internalClass = _stack.Peek(1).AsClass;
                             internalClass.Methods[methodName] = method;
@@ -329,9 +339,15 @@ namespace LoxSharp.Core
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private Value ReadConstant(ref CallFrame callFrame)
+        private Value ReadConstant8(ref CallFrame callFrame)
         {
             return _currentConstants[ReadByte(ref callFrame)];
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private Value ReadConstant16(ref CallFrame callFrame)
+        {
+            return _currentConstants[ReadUShort(ref callFrame)];
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

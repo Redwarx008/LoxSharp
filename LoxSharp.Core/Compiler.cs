@@ -1,17 +1,59 @@
 using System.Diagnostics;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 
 namespace LoxSharp.Core
 {
-    using ParseFunc = Action<bool>;
     internal class Compiler
     {
+        private delegate void ParseFunc(CompileState state, bool canAssign);
         private class Parser
         {
             public Token Previous { get; set; }
-            public Token Current { get; set; }  
-            public int TokenIndex { get; set; }
+            public Token Current { get; set; }
 
+            private Scanner _scanner;
+            public Parser(string source)
+            {
+                _scanner = new Scanner(source);
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public void Advance()
+            {
+                Previous = Current;
+                Current = _scanner.ScanToken();
+            }
+
+            [method: MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public void Consume(TokenType type, string message)
+            {
+                if (Current.Type == type)
+                {
+                    Advance();
+                }
+                else
+                {
+                    throw new CompilerException(Current, message);
+                }
+            }
+
+            [method: MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public bool Check(TokenType type)
+            {
+                return Current.Type == type;
+            }
+
+            [method: MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public bool Match(TokenType type)
+            {
+                if (!Check(type))
+                {
+                    return false;
+                }
+                Advance();
+                return true;
+            }
         }
 
         private enum FunctionType
@@ -63,7 +105,7 @@ namespace LoxSharp.Core
             }
         }
 
-        private class FunctionCompileState
+        private class CompileState
         {
             internal class LoopState
             {
@@ -72,18 +114,22 @@ namespace LoxSharp.Core
                 public List<int> BreakJumpStarts { get; set; } = new();
             }
             public List<LocalVariabal> LocalVars { get; private set; }
+            public Dictionary<string, int> GlobalValueIndexs { get; private set; }
+            public List<Value> GlobalValues { get; private set; }
+            public Stack<ClassCompileState> ClassStates { get; private set; }
             public Stack<LoopState> LoopStates { get; private set; }
             public int ScopeDepth { get; set; } = 0;
             public FunctionType FunctionType { get; private set; }
             public Function Function { get; private set; }
-
-            public FunctionCompileState(FunctionType functionType)
+            public Parser Parser { get; private set; }
+            public CompileState(Parser parser, FunctionType functionType)
             {
+                ClassStates = new Stack<ClassCompileState>();
                 LocalVars = new List<LocalVariabal>(16);
                 LoopStates = new Stack<LoopState>();
                 Function = new Function();
                 FunctionType = functionType;
-
+                Parser = parser;
                 // In the VM, stack slot 0 stores the calling function. 
                 if (functionType == FunctionType.ClassMethod || functionType == FunctionType.Initialized)
                 {
@@ -100,35 +146,19 @@ namespace LoxSharp.Core
 
         }
 
-        private readonly ParseRule[] _rules;
+        private static readonly ParseRule[] _rules;
 
-        private Token _previousToken;
-        private Token _currentToken;
-        private int _tokenIndex;
-        private List<Token>? _tokens;
-        private Stack<FunctionCompileState> _functionStates;
-        private Stack<ClassCompileState> _classStates;
+        private Stack<CompileState> _functionStates;
 
-        private FunctionCompileState CurrentFunctionState => _functionStates.Peek();
-        private Chunk CurrentChunk => CurrentFunctionState.Function.Chunk;
-
-        private Dictionary<string, int> _globalValueIndexs;
-        private List<Value> _globalValues;
-
-        public Compiler(List<Value> globalValues, Dictionary<string, int> globalValueIndexs)
+        static Compiler()
         {
-            _classStates = new Stack<ClassCompileState>();
-            _functionStates = new Stack<FunctionCompileState>();
-            _globalValueIndexs = globalValueIndexs;
-            _globalValues = globalValues;
-
             _rules = new ParseRule[Enum.GetValues(typeof(TokenType)).Length];
 
             _rules[(int)TokenType.LEFT_PAREN] = new ParseRule(Grouping, Call, Precedence.Call);
             _rules[(int)TokenType.RIGHT_PAREN] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.LEFT_BRACE] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.RIGHT_BRACE] = new ParseRule(null, null, Precedence.None);
-            _rules[(int)TokenType.LEFT_BRACKET] = new ParseRule(BracketCreate, BracketIndex, Precedence.Call);
+            _rules[(int)TokenType.LEFT_BRACKET] = new ParseRule(ArrayCreate, ArrayOrMapIndex, Precedence.Call);
             _rules[(int)TokenType.RIGHT_BRACKET] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.COMMA] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.DOT] = new ParseRule(null, Dot, Precedence.Call);
@@ -146,8 +176,8 @@ namespace LoxSharp.Core
             _rules[(int)TokenType.LESS] = new ParseRule(null, Binary, Precedence.Comparison);
             _rules[(int)TokenType.LESS_EQUAL] = new ParseRule(null, Binary, Precedence.Comparison);
             _rules[(int)TokenType.IDENTIFIER] = new ParseRule(Variable, null, Precedence.None);
-            _rules[(int)TokenType.STRING] = new ParseRule(String, null, Precedence.None);
-            _rules[(int)TokenType.NUMBER] = new ParseRule(Number, null, Precedence.None);
+            _rules[(int)TokenType.STRING] = new ParseRule(Literal, null, Precedence.None);
+            _rules[(int)TokenType.NUMBER] = new ParseRule(Literal, null, Precedence.None);
             _rules[(int)TokenType.AND] = new ParseRule(null, And, Precedence.And);
             _rules[(int)TokenType.CLASS] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.ELSE] = new ParseRule(null, null, Precedence.None);
@@ -155,7 +185,7 @@ namespace LoxSharp.Core
             _rules[(int)TokenType.FOR] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.FUN] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.IF] = new ParseRule(null, null, Precedence.None);
-            _rules[(int)TokenType.NIL] = new ParseRule(Literal, null, Precedence.None);
+            _rules[(int)TokenType.NULL] = new ParseRule(Literal, null, Precedence.None);
             _rules[(int)TokenType.OR] = new ParseRule(null, Or, Precedence.Or);
             _rules[(int)TokenType.PRINT] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.RETURN] = new ParseRule(null, null, Precedence.None);
@@ -166,198 +196,198 @@ namespace LoxSharp.Core
             _rules[(int)TokenType.WHILE] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.EOF] = new ParseRule(null, null, Precedence.None);
         }
+        public Compiler()
+        {
+            _functionStates = new Stack<CompileState>();
+            _globalValueIndexs = globalValueIndexs;
+            _globalValues = globalValues;
+
+        }
 
         public CompiledScript Compile(string source)
         {
-            _tokens = new Scanner(source).ScanSource();
+            Parser parser = new Parser(source);
 
-            BeginCompilerState(FunctionType.Script);
+            CompileState compile = new(parser, FunctionType.Script);
 
-            Advance();
-            while (_currentToken.Type != TokenType.EOF)
+            parser.Advance();
+            while (!parser.Match(TokenType.EOF))
             {
-                Declaration();
+                Declaration(compile);
             }
 
-            Function topFunction = EndCompilerState();
+            Function topFunction = EndCompilerState(compile);
             CompiledScript compiled = new(topFunction);
-            Reset();
             return compiled;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void Reset()
+        private static void BeginScope(CompileState compile)
         {
-            _currentToken = default;
-            _previousToken = default;
-            _tokenIndex = 0;
-            _tokens = null;
-        }
-
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void BeginScope()
-        {
-            ++CurrentFunctionState.ScopeDepth;
+            ++compile.ScopeDepth;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void EndScope()
+        private static void EndScope(CompileState compile)
         {
-            --CurrentFunctionState.ScopeDepth;
 
-            while (CurrentFunctionState.LocalVars.Count > 0 &&
-                CurrentFunctionState.LocalVars[CurrentFunctionState.LocalVars.Count - 1].Depth >
-                CurrentFunctionState.ScopeDepth)
+            --compile.ScopeDepth;
+
+            while (compile.LocalVars.Count > 0 &&
+                compile.LocalVars[compile.LocalVars.Count - 1].Depth >
+                compile.ScopeDepth)
             {
-                EmitBytes((byte)OpCode.POP);
-                CurrentFunctionState.LocalVars.RemoveAt(CurrentFunctionState.LocalVars.Count - 1);
+                EmitOp(compile, OpCode.POP);
+                compile.LocalVars.RemoveAt(compile.LocalVars.Count - 1);
             }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void BeginCompilerState(FunctionType functionType)
-        {
-            FunctionCompileState compilerState = new(functionType);
-            if (functionType != FunctionType.Script)
-            {
-                compilerState.Function.Name = _previousToken.Lexeme;
-            }
-            else
-            {
-                compilerState.Function.Name = "Main";
-            }
+        //[MethodImpl(MethodImplOptions.AggressiveInlining)]
+        //private void BeginCompilerState(FunctionType functionType)
+        //{
+        //    CompileState compilerState = new(FunctionType.Script);
+        //    if (functionType != FunctionType.Script)
+        //    {
+        //        compilerState.Function.Name = _previousToken.Lexeme;
+        //    }
+        //    else
+        //    {
+        //        compilerState.Function.Name = "Main";
+        //    }
 
-            _functionStates.Push(compilerState);
-        }
+        //    _functionStates.Push(compilerState);
+        //}
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private Function EndCompilerState()
+        private static Function EndCompilerState(CompileState compile)
         {
 #if DEBUG
             Disassembler disassembler = Disassembler.Instance;
-            disassembler.DisassembleFunction(_functionStates.Peek().Function, _globalValues);
+            disassembler.DisassembleFunction(compile.Function, compile.GlobalValues);
             Console.Write(disassembler.GetText());
 #endif
-            EmitReturn();
-            return _functionStates.Pop().Function;
+            EmitReturn(compile);
+            return compile.Function;
         }
 
         #region utility method
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Advance()
-        {
-            Debug.Assert(_tokens != null);
-
-            _previousToken = _currentToken;
-            _currentToken = _tokens[_tokenIndex];
-            ++_tokenIndex;
-        }
-
-        [method: MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void Consume(TokenType type, string message)
-        {
-            if (_currentToken.Type == type)
-            {
-                Advance();
-            }
-            else
-            {
-                throw new CompilerException(_currentToken, message);
-            }
-        }
-
-        [method: MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private bool Check(TokenType type)
-        {
-            return _currentToken.Type == type;
-        }
-
-        [method: MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private bool Match(TokenType type)
-        {
-            if (!Check(type))
-            {
-                return false;
-            }
-            Advance();
-            return true;
-        }
-
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void EmitBytes(params byte[] b)
+        private static void EmitBytes(CompileState compile, params byte[] b)
         {
             for (int i = 0; i < b.Length; ++i)
             {
-                CurrentChunk.WriteByte(b[i], _previousToken.Line);
+                compile.Function.Chunk.WriteByte(b[i], compile.Parser.Previous.Line);
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private int EmitJump(OpCode instruction)
+        private static void EmitByte(CompileState compile, byte b)
         {
-            EmitBytes((byte)instruction, 0xff, 0xff);
-            return CurrentChunk.Instructions.Count - 1 - 2 + 1;
+            compile.Function.Chunk.WriteByte(b, compile.Parser.Previous.Line);
         }
 
-        private void PatchLoopBreakJumps(FunctionCompileState.LoopState loopState)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void EmitOp(CompileState compile, OpCode instruction)
+        {
+            EmitByte(compile, (byte)instruction);  
+        }
+        /// <summary>
+        /// Emits one 16-bit argument, which will be written big endian.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void EmitShort(CompileState compile, int arg)
+        {
+            byte high = (byte)((arg >> 8) & 0xff);
+            byte low = (byte)(arg & 0xff);  
+            EmitBytes(compile, high, low);
+        }
+
+        /// <summary>
+        /// Emits one bytecode instruction followed by a 16-bit argument, 
+        /// which will bewritten big endian.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void EmitOpWithShortArg(CompileState compile, OpCode instruction, int arg)
+        {
+            EmitOp(compile, instruction);
+            EmitShort(compile, arg);    
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void EmitOpWithArg(CompileState compile, OpCode instruction, byte arg)
+        {
+            EmitBytes(compile, (byte)instruction, arg);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int EmitJump(CompileState compile, OpCode instruction)
+        {
+            EmitBytes(compile, (byte)instruction, 0xff, 0xff);
+            return compile.Function.Chunk.Instructions.Count - 1 - 2 + 1;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void PatchLoopBreakJumps(CompileState compile, CompileState.LoopState loopState)
         {
             for (int i = 0; i < loopState.BreakJumpStarts.Count; ++i)
             {
-                PatchJump(loopState.BreakJumpStarts[i]);
+                PatchJump(compile, loopState.BreakJumpStarts[i]);
             }
-        }
-
-        private void EmitLoop(int loopStart)
-        {
-            EmitBytes((byte)OpCode.LOOP);
-
-            int offset = CurrentChunk.Instructions.Count - loopStart + 2;
-            if (offset > ushort.MaxValue)
-            {
-                throw new CompilerException(_previousToken, "Loop body too large.");
-            }
-
-            byte high = (byte)((offset >> 8) & 0xff);
-            byte low = (byte)(offset & 0xff);
-            EmitBytes(high, low);
-        }
-
-        private void EmitReturn()
-        {
-            if (CurrentFunctionState.FunctionType == FunctionType.Initialized)
-            {
-                EmitBytes((byte)OpCode.GET_LOCAL, 0);
-            }
-            else
-            {
-                EmitBytes((byte)OpCode.NIL);
-            }
-
-            EmitBytes((byte)OpCode.RETURN);
-        }
-
-        [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-        private void EmitConstant(Value val)
-        {
-            EmitBytes((byte)OpCode.CONSTANT_8, MakeConstant(val));
-        }
-
-        [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
-        private byte MakeConstant(Value val)
-        {
-            int index = CurrentChunk.AddConstant(val);
-            if (index > byte.MaxValue)
-            {
-                throw new CompilerException(_previousToken, "Too many constants in one chunk.");
-            }
-            return (byte)index;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private ParseRule GetRule(TokenType type)
+        private static void EmitLoop(CompileState compile, int loopStart)
+        {
+            EmitOp(compile, OpCode.LOOP);
+
+            int offset = compile.Function.Chunk.Instructions.Count - loopStart + 2;
+            if (offset > ushort.MaxValue)
+            {
+                throw new CompilerException(compile.Parser.Previous, "Loop body too large.");
+            }
+
+            EmitShort(compile, 0xff);
+        }
+
+        private static void EmitReturn(CompileState compile)
+        {
+            if (compile.FunctionType == FunctionType.Initialized)
+            {
+                EmitBytes(compile, (byte)OpCode.GET_LOCAL, 0);
+            }
+            else
+            {
+                EmitOp(compile, OpCode.NULL);
+            }
+
+            EmitOp(compile, OpCode.RETURN);
+        }
+
+        [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+        private static void EmitConstant(CompileState compile, Value val)
+        {
+            int index = AddConstant(compile, val);
+            if (index > Byte.MaxValue)
+            {
+                EmitOpWithShortArg(compile, OpCode.CONSTANT_16, index);
+            }
+            else
+            {
+                EmitOpWithArg(compile, OpCode.CONSTANT_8, (byte)index);
+            }
+        }
+
+        [MethodImpl(methodImplOptions: MethodImplOptions.AggressiveInlining)]
+        private static int AddConstant(CompileState compile, Value val)
+        {
+            int index = compile.Function.Chunk.AddConstant(val);
+
+            return index;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static ParseRule GetRule(TokenType type)
         {
             return _rules[(int)type];
         }
@@ -366,43 +396,39 @@ namespace LoxSharp.Core
 
         #region Parse literal method
 
-        private void Literal(bool canAssign)
+        private static void Literal(CompileState compile, bool canAssign)
         {
-            switch (_previousToken.Type)
+            switch (compile.Parser.Previous.Type)
             {
                 case TokenType.FALSE:
-                    EmitBytes((byte)OpCode.FALSE);
+                    EmitOp(compile, OpCode.FALSE);
                     break;
                 case TokenType.TRUE:
-                    EmitBytes((byte)OpCode.TRUE);
+                    EmitOp(compile, OpCode.TRUE);
                     break;
-                case TokenType.NIL:
-                    EmitBytes((byte)OpCode.NIL);
+                case TokenType.NULL:
+                    EmitOp(compile, OpCode.NULL);
+                    break;
+                case TokenType.NUMBER:
+                    double value = Double.Parse(compile.Parser.Previous.Lexeme);
+                    EmitConstant(compile, new Value(value));
+                    break;
+                case TokenType.STRING:
+                    EmitConstant(compile, new Value(compile.Parser.Previous.Lexeme));
                     break;
                 default: return; // Unreachable.
             }
         }
-        private void Number(bool canAssign)
+        private static void Variable(CompileState compile, bool canAssign)
         {
-            double value = Double.Parse(_previousToken.Lexeme);
-            EmitConstant(new Value(value));
+            NamedVariable(compile, compile.Parser.Previous.Lexeme, canAssign);
         }
 
-        private void String(bool canAssign)
-        {
-            EmitConstant(new Value(_previousToken.Lexeme));
-        }
-
-        private void Variable(bool canAssign)
-        {
-            NamedVariable(_previousToken.Lexeme, canAssign);
-        }
-
-        private void NamedVariable(string variableName, bool canAssign)
+        private static void NamedVariable(CompileState compile, string variableName, bool canAssign)
         {
             OpCode getOp, setOp;
 
-            int index = ResolveLocalVar(CurrentFunctionState, variableName);
+            int index = ResolveLocalVar(compile, variableName);
             if (index != -1)
             {
                 getOp = OpCode.GET_LOCAL;
@@ -410,183 +436,186 @@ namespace LoxSharp.Core
             }
             else
             {
-                index = GetIdentifierIndex(variableName);
+                index = GetIdentifierIndex(compile, variableName);
                 getOp = OpCode.GET_GLOBAL;
                 setOp = OpCode.SET_GLOBAL;
             }
 
-            if (canAssign && Match(TokenType.EQUAL))
+            if (canAssign && compile.Parser.Match(TokenType.EQUAL))
             {
-                Expression();
-                EmitBytes((byte)setOp, (byte)index);
+                Expression(compile);
+                EmitOpWithShortArg(compile, setOp, index);
             }
             else
             {
-                EmitBytes((byte)getOp, (byte)index);
+                EmitOpWithShortArg(compile, getOp, index);
             }
         }
-        private void Unary(bool canAssign)
+        private static void Unary(CompileState compile, bool canAssign)
         {
-            TokenType operatorType = _previousToken.Type;
+            TokenType operatorType = compile.Parser.Previous.Type;
 
             // Compile the operand.
-            ParsePrecedence(Precedence.Unary);
+            ParsePrecedence(compile, Precedence.Unary);
 
             switch (operatorType)
             {
                 case TokenType.BANG:
-                    EmitBytes((byte)OpCode.NOT);
+                    EmitOp(compile, OpCode.NOT);
                     break;
                 case TokenType.MINUS:
-                    EmitBytes((byte)OpCode.NEGATE);
+                    EmitOp(compile, OpCode.NEGATE);
                     break;
                 default:
                     return;// Unreachable.
             }
         }
 
-        private void Binary(bool canAssign)
+        private static void Binary(CompileState compile, bool canAssign)
         {
-            TokenType operatorType = _previousToken.Type;
+            TokenType operatorType = compile.Parser.Previous.Type;
             ParseRule rule = GetRule(operatorType);
-            ParsePrecedence(rule.Precedence + 1);
+            ParsePrecedence(compile, rule.Precedence + 1);
 
             switch (operatorType)
             {
                 case TokenType.BANG_EQUAL:
-                    EmitBytes((byte)OpCode.EQUAL, (byte)OpCode.NOT);
+                    EmitBytes(compile, (byte)OpCode.EQUAL, (byte)OpCode.NOT);
                     break;
                 case TokenType.EQUAL_EQUAL:
-                    EmitBytes((byte)OpCode.EQUAL);
+                    EmitOp(compile, OpCode.EQUAL);
                     break;
                 case TokenType.GREATER:
-                    EmitBytes((byte)OpCode.GREATER);
+                    EmitOp(compile, OpCode.GREATER);
                     break;
                 case TokenType.GREATER_EQUAL:
-                    EmitBytes((byte)OpCode.LESS, (byte)OpCode.NOT);
+                    EmitBytes(compile, (byte)OpCode.LESS, (byte)OpCode.NOT);
                     break;
                 case TokenType.LESS:
-                    EmitBytes((byte)OpCode.LESS);
+                    EmitOp(compile, OpCode.LESS);
                     break;
                 case TokenType.LESS_EQUAL:
-                    EmitBytes((byte)OpCode.GREATER, (byte)OpCode.NOT);
+                    EmitBytes(compile, (byte)OpCode.GREATER, (byte)OpCode.NOT);
                     break;
                 case TokenType.PLUS:
-                    EmitBytes((byte)OpCode.ADD);
+                    EmitOp(compile, OpCode.ADD);
                     break;
                 case TokenType.MINUS:
-                    EmitBytes((byte)OpCode.SUBTRACT);
+                    EmitOp(compile, OpCode.SUBTRACT);
                     break;
                 case TokenType.STAR:
-                    EmitBytes((byte)OpCode.MULTIPLY);
+                    EmitOp(compile, OpCode.MULTIPLY);
                     break;
                 case TokenType.SLASH:
-                    EmitBytes((byte)OpCode.DIVIDE);
+                    EmitOp(compile, OpCode.DIVIDE);
                     break;
                 default: return; // Unreachable.
             }
         }
 
-        private void Call(bool canAssgin)
+        private static void Call(CompileState compile, bool canAssgin)
         {
-            byte argCount = ParseCallArgumentList();
-            EmitBytes((byte)OpCode.CALL, argCount);
+            byte argCount = ParseCallArgumentList(compile);
+            EmitOpWithArg(compile, OpCode.CALL, argCount);
         }
 
-        private void Dot(bool canAssign)
+        private static void Dot(CompileState compile, bool canAssign)
         {
-            Consume(TokenType.IDENTIFIER, "Expect property name after '.'.");
-            byte nameConstIndex = MakeConstant(new Value(_previousToken.Lexeme));
+            Parser parser = compile.Parser;
+            parser.Consume(TokenType.IDENTIFIER, "Expect property name after '.'.");
+            int nameConstIndex = AddConstant(compile, new Value(parser.Previous.Lexeme));
 
-            if (canAssign && Match(TokenType.EQUAL))
+            if (canAssign && parser.Match(TokenType.EQUAL))
             {
-                Expression();
-                EmitBytes((byte)OpCode.SET_PROPERTY, nameConstIndex);
+                Expression(compile);
+                EmitOpWithShortArg(compile, OpCode.SET_PROPERTY, nameConstIndex);
             }
-            else if (Match(TokenType.LEFT_PAREN)) // direct invoke
+            else if (parser.Match(TokenType.LEFT_PAREN)) // direct invoke
             {
-                byte argCount = ParseCallArgumentList();
-                EmitBytes((byte)OpCode.INVOKE, nameConstIndex, argCount);
+                byte argCount = ParseCallArgumentList(compile);
+                EmitOpWithShortArg(compile, OpCode.INVOKE, nameConstIndex);
+                EmitByte(compile, argCount);
             }
             else
             {
-                EmitBytes((byte)OpCode.GET_PROPERTY, nameConstIndex);
+                EmitOpWithShortArg(compile, OpCode.GET_PROPERTY, nameConstIndex);
             }
         }
 
-        private void Grouping(bool canAssign)
+        private static void Grouping(CompileState compile, bool canAssign)
         {
-            Expression();
-            Consume(TokenType.RIGHT_PAREN, "Expect ')' after expression.");
+            Expression(compile);
+            compile.Parser.Consume(TokenType.RIGHT_PAREN, "Expect ')' after expression.");
         }
 
-        private void And(bool canAssign)
+        private static void And(CompileState compile, bool canAssign)
         {
-            int endJump = EmitJump(OpCode.JUMP_IF_FALSE);
+            int endJump = EmitJump(compile, OpCode.JUMP_IF_FALSE);
 
-            EmitBytes((byte)OpCode.POP);
-            ParsePrecedence(Precedence.And);
+            EmitOp(compile, OpCode.POP);
+            ParsePrecedence(compile, Precedence.And);
 
-            PatchJump(endJump);
+            PatchJump(compile, endJump);
         }
 
-        private void Or(bool canAssign)
+        private static void Or(CompileState compile, bool canAssign)
         {
-            int elseJump = EmitJump(OpCode.JUMP_IF_FALSE);
-            int endJump = EmitJump(OpCode.JUMP);
+            int elseJump = EmitJump(compile, OpCode.JUMP_IF_FALSE);
+            int endJump = EmitJump(compile, OpCode.JUMP);
 
-            PatchJump(elseJump);
-            EmitBytes((byte)OpCode.POP);
+            PatchJump(compile, elseJump);
+            EmitOp(compile, OpCode.POP);
 
-            ParsePrecedence(Precedence.Or);
-            PatchJump(endJump);
+            ParsePrecedence(compile, Precedence.Or);
+            PatchJump(compile, endJump);
         }
 
-        private void This(bool canAssign)
+        private static void This(CompileState compile, bool canAssign)
         {
-            if (_classStates.Count == 0)
+            if (compile.ClassStates.Count == 0)
             {
-                throw new CompilerException(_previousToken, "Can't use 'this' outside of a class.");
+                throw new CompilerException(compile.Parser.Previous, "Can't use 'this' outside of a class.");
             }
 
-            Variable(false);
+            Variable(compile, false);
         }
 
-        private void BracketCreate(bool canAssign)
+        private static void ArrayCreate(CompileState compile, bool canAssign)
         {
-            int arrayIndex = _globalValueIndexs[nameof(Array)];
-            EmitBytes((byte)OpCode.GET_GLOBAL, (byte)arrayIndex);
+            Parser parser = compile.Parser;
+            int arrayIndex = compile.GlobalValueIndexs[nameof(Array)];
+            EmitOpWithShortArg(compile, OpCode.GET_GLOBAL, arrayIndex);
             // initialization list
             byte argCount = 0;
-            if (!Check(TokenType.RIGHT_BRACKET))
+            if (!parser.Check(TokenType.RIGHT_BRACKET))
             {
                 do
                 {
-                    Expression();
+                    Expression(compile);
                     if (argCount > Byte.MaxValue)
                     {
-                        throw new CompilerException(_previousToken, "Can't have more than 255 initializer.");
+                        throw new CompilerException(parser.Previous, "Can't have more than 255 initializer.");
                     }
                     ++argCount;
-                } while (Match(TokenType.COMMA));
+                } while (parser.Match(TokenType.COMMA));
             }
-            Consume(TokenType.RIGHT_BRACKET, "Expect ']' after initialization list.");
+            parser.Consume(TokenType.RIGHT_BRACKET, "Expect ']' after initialization list.");
 
-            EmitBytes((byte)OpCode.CALL, argCount);
+            EmitOpWithArg(compile, OpCode.CALL, argCount);
         }
 
-        private void BracketIndex(bool canAssign)
+        private static void ArrayOrMapIndex(CompileState compile, bool canAssign)
         {
-            Expression();
-            Consume(TokenType.RIGHT_BRACKET, "Expect ']' after index.");
-            if (canAssign && Match(TokenType.EQUAL))
+            Expression(compile);
+            compile.Parser.Consume(TokenType.RIGHT_BRACKET, "Expect ']' after index.");
+            if (canAssign && compile.Parser.Match(TokenType.EQUAL))
             {
-                Expression();
-                EmitBytes((byte)OpCode.SET_INDEX);
+                Expression(compile);
+                EmitOp(compile, OpCode.SET_INDEX);
             }
             else
             {
-                EmitBytes((byte)OpCode.GET_INDEX);
+                EmitOp(compile, OpCode.GET_INDEX);
             }
         }
 
@@ -594,345 +623,350 @@ namespace LoxSharp.Core
 
         #region Parse expression or statement method
 
-        private void Block()
+        private static void Block(CompileState compile)
         {
-            while (!Check(TokenType.RIGHT_BRACE) && !Check(TokenType.EOF))
+            Parser parser = compile.Parser; 
+            while (!parser.Check(TokenType.RIGHT_BRACE) && !parser.Check(TokenType.EOF))
             {
-                Declaration();
+                Declaration(compile);
             }
-            Consume(TokenType.RIGHT_BRACE, "Expect '}' after block.");
+            parser.Consume(TokenType.RIGHT_BRACE, "Expect '}' after block.");
         }
 
         /// <summary>
         /// We simply parse the lowest precedence level, 
         /// which subsumes all of the higher-precedence expressions too. 
         /// </summary>
-        private void Expression()
+        private static void Expression(CompileState compile)
         {
-            ParsePrecedence(Precedence.Assignment);
+            ParsePrecedence(compile, Precedence.Assignment);
         }
 
-        private void ExpressionStatement()
+        private static void ExpressionStatement(CompileState compile)
         {
-            Expression();
-            Consume(TokenType.SEMICOLON, "Expect ';' after expression.");
-            EmitBytes((byte)OpCode.POP);
+            Expression(compile);
+            compile.Parser.Consume(TokenType.SEMICOLON, "Expect ';' after expression.");
+            EmitOp(compile, OpCode.POP);
         }
-        private void Statement()
+        private static void Statement(CompileState compile)
         {
-            if (Match(TokenType.IF))
+            Parser parser = compile.Parser;
+            if (parser.Match(TokenType.IF))
             {
-                IfStatement();
+                IfStatement(compile);
             }
-            else if (Match(TokenType.WHILE))
+            else if (parser.Match(TokenType.WHILE))
             {
-                WhileStatement();
+                WhileStatement(compile);
             }
-            else if (Match(TokenType.FOR))
+            else if (parser.Match(TokenType.FOR))
             {
-                ForStatement();
+                ForStatement(compile);
             }
-            else if (Match(TokenType.LEFT_BRACE))
+            else if (parser.Match(TokenType.LEFT_BRACE))
             {
-                BeginScope();
-                Block();
-                EndScope();
+                BeginScope(compile);
+                Block(compile);
+                EndScope(compile);
             }
-            else if (Match(TokenType.CONTINUE))
+            else if (parser.Match(TokenType.CONTINUE))
             {
-                ContinueStatement();
+                ContinueStatement(compile);
             }
-            else if (Match(TokenType.RETURN))
+            else if (parser.Match(TokenType.RETURN))
             {
-                ReturnStatement();
+                ReturnStatement(compile);
             }
-            else if (Match(TokenType.BREAK))
+            else if (parser.Match(TokenType.BREAK))
             {
-                BreakStatement();
+                BreakStatement(compile);
             }
             else
             {
-                ExpressionStatement();
+                ExpressionStatement(compile);
             }
         }
-        private void ReturnStatement()
+        private static void ReturnStatement(CompileState compile)
         {
-            if (CurrentFunctionState.FunctionType == FunctionType.Script)
+            Parser parser = compile.Parser; 
+            if (compile.FunctionType == FunctionType.Script)
             {
-                throw new CompilerException(_previousToken, "Can't return from top-level code.");
+                throw new CompilerException(parser.Previous, "Can't return from top-level code.");
             }
 
-            if (Match(TokenType.SEMICOLON))
+            if (parser.Match(TokenType.SEMICOLON))
             {
-                EmitReturn();
+                EmitReturn(compile);
             }
             else
             {
-                if (CurrentFunctionState.FunctionType == FunctionType.Initialized)
+                if (compile.FunctionType == FunctionType.Initialized)
                 {
-                    throw new CompilerException(_previousToken, "Can't return a value from an initializer");
+                    throw new CompilerException(parser.Previous, "Can't return a value from an initializer");
                 }
 
-                Expression();
-                Consume(TokenType.SEMICOLON, "Expect ';' after return value.");
-                EmitBytes((byte)OpCode.RETURN);
+                Expression(compile);
+                parser.Consume(TokenType.SEMICOLON, "Expect ';' after return value.");
+                EmitOp(compile, OpCode.RETURN);
             }
         }
 
-        private void ContinueStatement()
+        private static void ContinueStatement(CompileState compile)
         {
-            if (CurrentFunctionState.LoopStates.Count == 0)
+            if (compile.LoopStates.Count == 0)
             {
-                throw new CompilerException(_previousToken, "Can't use 'continue' outside of a loop.");
+                throw new CompilerException(compile.Parser.Previous, "Can't use 'continue' outside of a loop.");
             }
 
-            Consume(TokenType.SEMICOLON, "Expect ';' after 'continue'.");
+            compile.Parser.Consume(TokenType.SEMICOLON, "Expect ';' after 'continue'.");
 
             // Discard any locals created inside the loop.
-            for (int i = CurrentFunctionState.LocalVars.Count - 1;
-                i >= 0 && CurrentFunctionState.LocalVars[i].Depth > CurrentFunctionState.LoopStates.Peek().ScopeDepth;
+            for (int i = compile.LocalVars.Count - 1;
+                i >= 0 && compile.LocalVars[i].Depth > compile.LoopStates.Peek().ScopeDepth;
                 --i)
             {
-                EmitBytes((byte)OpCode.POP);
+                EmitOp(compile, OpCode.POP);
             }
 
             // Jump to top of current innermost loop.
-            EmitLoop(CurrentFunctionState.LoopStates.Peek().LoopStart);
+            EmitLoop(compile, compile.LoopStates.Peek().LoopStart);
         }
 
-        private void BreakStatement()
+        private static void BreakStatement(CompileState compile)
         {
-            if (CurrentFunctionState.LoopStates.Count == 0)
+            if (compile.LoopStates.Count == 0)
             {
-                throw new CompilerException(_previousToken, "Can't use 'continue' outside of a loop.");
+                throw new CompilerException(compile.Parser.Previous, "Can't use 'continue' outside of a loop.");
             }
 
-            Consume(TokenType.SEMICOLON, "Expect ';' after 'break'.");
+            compile.Parser.Consume(TokenType.SEMICOLON, "Expect ';' after 'break'.");
 
             // Discard any locals created inside the loop.
-            for (int i = CurrentFunctionState.LocalVars.Count - 1;
-                i >= 0 && CurrentFunctionState.LocalVars[i].Depth > CurrentFunctionState.LoopStates.Peek().ScopeDepth;
+            for (int i = compile.LocalVars.Count - 1;
+                i >= 0 && compile.LocalVars[i].Depth > compile.LoopStates.Peek().ScopeDepth;
                 --i)
             {
-                EmitBytes((byte)OpCode.POP);
+                EmitOp(compile, OpCode.POP);
             }
 
 
-            int exitJumpStart = EmitJump(OpCode.JUMP);
-            CurrentFunctionState.LoopStates.Peek().BreakJumpStarts.Add(exitJumpStart);
+            int exitJumpStart = EmitJump(compile, OpCode.JUMP);
+            compile.LoopStates.Peek().BreakJumpStarts.Add(exitJumpStart);
         }
 
-        private void WhileStatement()
+        private static void WhileStatement(CompileState compile)
         {
-            Debug.Assert(CurrentFunctionState != null);
 
-            FunctionCompileState.LoopState loopState = new()
+            CompileState.LoopState loopState = new()
             {
-                LoopStart = CurrentChunk.Instructions.Count,
-                ScopeDepth = CurrentFunctionState.ScopeDepth
+                LoopStart = compile.Function.Chunk.Instructions.Count,
+                ScopeDepth = compile.ScopeDepth
             };
-            CurrentFunctionState.LoopStates.Push(loopState);
+            compile.LoopStates.Push(loopState);
 
-            Consume(TokenType.LEFT_PAREN, "Expect '(' after 'while'.");
-            Expression();
-            Consume(TokenType.RIGHT_PAREN, "Expect ')' after condition.");
+            compile.Parser.Consume(TokenType.LEFT_PAREN, "Expect '(' after 'while'.");
+            Expression(compile);
+            compile.Parser.Consume(TokenType.RIGHT_PAREN, "Expect ')' after condition.");
 
-            int exitJumpStart = EmitJump(OpCode.JUMP_IF_FALSE);
+            int exitJumpStart = EmitJump(compile, OpCode.JUMP_IF_FALSE);
 
-            EmitBytes((byte)OpCode.POP);
-            Statement();
-            EmitLoop(CurrentFunctionState.LoopStates.Peek().LoopStart);
+            EmitOp(compile, OpCode.POP);
+            Statement(compile);
+            EmitLoop(compile, compile.LoopStates.Peek().LoopStart);
 
 
-            PatchJump(exitJumpStart);
-            EmitBytes((byte)OpCode.POP);
+            PatchJump(compile, exitJumpStart);
+            EmitOp(compile, OpCode.POP);
 
-            PatchLoopBreakJumps(loopState);
-            CurrentFunctionState.LoopStates.Pop();
+            PatchLoopBreakJumps(compile, loopState);
+            compile.LoopStates.Pop();
         }
 
-        private void ForStatement()
+        private static void ForStatement(CompileState compile)
         {
-            Debug.Assert(CurrentFunctionState != null);
-
-            BeginScope();
-            Consume(TokenType.LEFT_PAREN, "Expect '(' after 'for'.");
+            Parser parser = compile.Parser; 
+            BeginScope(compile);
+            parser.Consume(TokenType.LEFT_PAREN, "Expect '(' after 'for'.");
 
             // First clause.
-            if (Match(TokenType.SEMICOLON))
+            if (parser.Match(TokenType.SEMICOLON))
             {
                 // No initializer.
             }
-            else if (Match(TokenType.VAR))
+            else if (parser.Match(TokenType.VAR))
             {
-                VarDeclaration();
+                VarDeclaration(compile);
             }
             else
             {
-                ExpressionStatement();
+                ExpressionStatement(compile);
             }
 
-            FunctionCompileState.LoopState loopState = new()
+            CompileState.LoopState loopState = new()
             {
-                LoopStart = CurrentChunk.Instructions.Count,
-                ScopeDepth = CurrentFunctionState.ScopeDepth
+                LoopStart = compile.Function.Chunk.Instructions.Count,
+                ScopeDepth = compile.ScopeDepth
             };
-            CurrentFunctionState.LoopStates.Push(loopState);
+            compile.LoopStates.Push(loopState);
 
             // Second clause.
             int exitJump = -1;
-            if (!Match(TokenType.SEMICOLON))
+            if (!parser.Match(TokenType.SEMICOLON))
             {
-                Expression();
-                Consume(TokenType.SEMICOLON, "Expect ';' after loop condition.");
+                Expression(compile);
+                parser.Consume(TokenType.SEMICOLON, "Expect ';' after loop condition.");
                 // Jump out of the loop if the condition is false.
-                exitJump = EmitJump(OpCode.JUMP_IF_FALSE);
+                exitJump = EmitJump(compile, OpCode.JUMP_IF_FALSE);
 
-                EmitBytes((byte)OpCode.POP);
+                EmitOp(compile, OpCode.POP);
             }
 
             // Third clause
-            if (!Match(TokenType.RIGHT_PAREN))
+            if (!parser.Match(TokenType.RIGHT_PAREN))
             {
-                int bodyJump = EmitJump(OpCode.JUMP);
-                int incrementStart = CurrentChunk.Instructions.Count;
-                Expression();
-                EmitBytes((byte)OpCode.POP);
-                Consume(TokenType.RIGHT_PAREN, "Expect ')' after for clauses.");
+                int bodyJump = EmitJump(compile, OpCode.JUMP);
+                int incrementStart = compile.Function.Chunk.Instructions.Count;
+                Expression(compile);
+                EmitOp(compile, OpCode.POP);
+                parser.Consume(TokenType.RIGHT_PAREN, "Expect ')' after for clauses.");
 
-                EmitLoop(CurrentFunctionState.LoopStates.Peek().LoopStart);
-                CurrentFunctionState.LoopStates.Peek().LoopStart = incrementStart;
-                PatchJump(bodyJump);
+                EmitLoop(compile, compile.LoopStates.Peek().LoopStart);
+                compile.LoopStates.Peek().LoopStart = incrementStart;
+                PatchJump(compile, bodyJump);
             }
 
-            Statement();
-            EmitLoop(CurrentFunctionState.LoopStates.Peek().LoopStart);
+            Statement(compile);
+            EmitLoop(compile, compile.LoopStates.Peek().LoopStart);
 
             if (exitJump != -1)
             {
-                PatchJump(exitJump);
-                EmitBytes((byte)OpCode.POP);
+                PatchJump(compile, exitJump);
+                EmitOp(compile, OpCode.POP);
             }
 
-            PatchLoopBreakJumps(loopState);
-            CurrentFunctionState.LoopStates.Pop();
+            PatchLoopBreakJumps(compile, loopState);
+            compile.LoopStates.Pop();
 
-            EndScope();
+            EndScope(compile);
         }
 
-        private void IfStatement()
+        private static void IfStatement(CompileState compile)
         {
-            Consume(TokenType.LEFT_PAREN, "Expect '(' after 'if'.");
-            Expression();
-            Consume(TokenType.RIGHT_PAREN, "Expect ')' after condition.");
+            Parser parser = compile.Parser;
+            parser.Consume(TokenType.LEFT_PAREN, "Expect '(' after 'if'.");
+            Expression(compile);
+            parser.Consume(TokenType.RIGHT_PAREN, "Expect ')' after condition.");
 
-            int thenJump = EmitJump(OpCode.JUMP_IF_FALSE);
-            EmitBytes((byte)OpCode.POP);
-            Statement();
+            int thenJump = EmitJump(compile, OpCode.JUMP_IF_FALSE);
+            EmitOp(compile, OpCode.POP);
+            Statement(compile);
 
-            int elseJump = EmitJump(OpCode.JUMP);
-            PatchJump(thenJump);
+            int elseJump = EmitJump(compile, OpCode.JUMP);
+            PatchJump(compile, thenJump);
 
-            EmitBytes((byte)OpCode.POP);
-            if (Match(TokenType.ELSE))
+            EmitOp(compile, OpCode.POP);
+            if (parser.Match(TokenType.ELSE))
             {
-                Statement();
+                Statement(compile);
             }
-            PatchJump(elseJump);
+            PatchJump(compile, elseJump);
         }
 
-        private void Declaration()
+        private static void Declaration(CompileState compile)
         {
-            if (Match(TokenType.CLASS))
+            Parser parser = compile.Parser;
+            if (parser.Match(TokenType.CLASS))
             {
-                ClassDeclaration();
+                ClassDeclaration(compile);
             }
-            else if (Match(TokenType.FUN))
+            else if (parser.Match(TokenType.FUN))
             {
-                FunDeclaration();
+                FunDeclaration(compile);
             }
-            else if (Match(TokenType.VAR))
+            else if (parser.Match(TokenType.VAR))
             {
-                VarDeclaration();
+                VarDeclaration(compile);
             }
             else
             {
-                Statement();
+                Statement(compile);
             }
         }
 
-        private void VarDeclaration()
+        private static void VarDeclaration(CompileState compile)
         {
-            byte global = ParseVariable("Expect variable name.");
+            int global = ParseVariable(compile, "Expect variable name.");
 
-            if (Match(TokenType.EQUAL))
+            if (compile.Parser.Match(TokenType.EQUAL))
             {
-                Expression();
+                Expression(compile);
             }
             else
             {
-                EmitBytes((byte)OpCode.NIL);
+                EmitOp(compile, OpCode.NULL);
             }
-            Consume(TokenType.SEMICOLON, "Expect ';' after variable declaration.");
-            DefineVariable(global);
+            compile.Parser.Consume(TokenType.SEMICOLON, "Expect ';' after variable declaration.");
+            DefineVariable(compile, global);
         }
 
-        private void FunDeclaration()
+        private static void FunDeclaration(CompileState compile)
         {
-            byte global = ParseVariable("Expect function name.");
-            MarkLocalInitialized();
-            ParseFunction(FunctionType.Function);
-            DefineVariable(global);
+            int global = ParseVariable(compile, "Expect function name.");
+            MarkLocalInitialized(compile);
+            ParseFunction(compile, FunctionType.Function);
+            DefineVariable(compile, global);
         }
 
-        private void ClassDeclaration()
+        private static void ClassDeclaration(CompileState compile)
         {
-            Consume(TokenType.IDENTIFIER, "Expect class name.");
-            string className = _previousToken.Lexeme;
-            byte nameConstIndex = MakeConstant(new Value(_previousToken.Lexeme));
-            DeclareVariable();
+            Parser parser = compile.Parser;
+            parser.Consume(TokenType.IDENTIFIER, "Expect class name.");
+            string className = parser.Previous.Lexeme;
+            int nameConstIndex = AddConstant(compile, new Value(parser.Previous.Lexeme));
+            DeclareVariable(compile);
 
-            EmitBytes((byte)OpCode.CLASS, nameConstIndex);
-            DefineVariable(GetIdentifierIndex(className));
+            EmitOpWithShortArg(compile, OpCode.CLASS, nameConstIndex);
+            DefineVariable(compile, GetIdentifierIndex(compile, className));
 
-            _classStates.Push(new ClassCompileState());
+            //_classStates.Push(new ClassCompileState());
 
-            NamedVariable(className, false);
-            Consume(TokenType.LEFT_BRACE, "Expect '{' before class body.");
+            NamedVariable(compile, className, false);
+            parser.Consume(TokenType.LEFT_BRACE, "Expect '{' before class body.");
 
-            while (!Check(TokenType.RIGHT_BRACE) && !Check(TokenType.EOF))
+            while (!parser.Check(TokenType.RIGHT_BRACE) && !parser.Check(TokenType.EOF))
             {
-                ParseClassMethod();
+                ParseClassMethod(compile);
             }
 
-            Consume(TokenType.RIGHT_BRACE, "Expect '}' after class body.");
-            EmitBytes((byte)OpCode.POP);
+            parser.Consume(TokenType.RIGHT_BRACE, "Expect '}' after class body.");
+            EmitOp(compile, OpCode.POP);
 
-            _classStates.Pop();
+            //_classStates.Pop();
         }
 
-        private void ParsePrecedence(Precedence precedence)
+        private static void ParsePrecedence(CompileState compile, Precedence precedence)
         {
-            Advance();
+            Parser parser = compile.Parser;
+            parser.Advance();
 
-            ParseFunc? prefixRule = GetRule(_previousToken.Type).Prefix;
+            ParseFunc? prefixRule = GetRule(parser.Previous.Type).Prefix;
             if (prefixRule == null)
             {
-                throw new CompilerException(_previousToken, "Expect expression.");
+                throw new CompilerException(parser.Previous, "Expect expression.");
             }
 
             bool canAssign = precedence <= Precedence.Assignment;
-            prefixRule(canAssign);
+            prefixRule(compile, canAssign);
 
-            while (precedence <= GetRule(_currentToken.Type).Precedence)
+            while (precedence <= GetRule(parser.Previous.Type).Precedence)
             {
-                Advance();
-                ParseFunc infixRule = GetRule(_previousToken.Type).Infix!;
-                infixRule(canAssign);
+                parser.Advance();
+                ParseFunc infixRule = GetRule(parser.Previous.Type).Infix!;
+                infixRule(compile, canAssign);
             }
-            if (canAssign && Match(TokenType.EQUAL))
+            if (canAssign && parser.Match(TokenType.EQUAL))
             {
-                throw new CompilerException(_previousToken, "Invalid assignment target.");
+                throw new CompilerException(parser.Previous, "Invalid assignment target.");
             }
         }
 
@@ -940,162 +974,164 @@ namespace LoxSharp.Core
 
         #region assistant method 
 
-        private byte ParseVariable(string errorMessage)
+        private static int ParseVariable(CompileState compile, string errorMessage)
         {
-            Consume(TokenType.IDENTIFIER, errorMessage);
+            compile.Parser.Consume(TokenType.IDENTIFIER, errorMessage);
 
-            DeclareVariable();
-            if (CurrentFunctionState.ScopeDepth > 0)
+            DeclareVariable(compile);
+            if (compile.ScopeDepth > 0)
             {
                 return 0;
             }
 
-            return GetIdentifierIndex(_previousToken.Lexeme);
+            return GetIdentifierIndex(compile, compile.Parser.Previous.Lexeme);
         }
 
-        private void ParseFunction(FunctionType functionType)
+        private static void ParseFunction(CompileState compile, FunctionType functionType)
         {
-            BeginCompilerState(functionType);
+            //BeginCompilerState(functionType);
+            Parser parser = compile.Parser; 
+            BeginScope(compile);
 
-            BeginScope();
+            parser.Consume(TokenType.LEFT_PAREN, "Expect '(' after function name.");
 
-            Consume(TokenType.LEFT_PAREN, "Expect '(' after function name.");
-
-            if (!Check(TokenType.RIGHT_PAREN))
+            if (!parser.Check(TokenType.RIGHT_PAREN))
             {
                 do
                 {
-                    ++CurrentFunctionState.Function.Arity;
-                    if (CurrentFunctionState.Function.Arity > Byte.MaxValue)
+                    ++compile.Function.Arity;
+                    if (compile.Function.Arity > Byte.MaxValue)
                     {
-                        throw new CompilerException(_previousToken, "Can't have more than 255 parameters.");
+                        throw new CompilerException(parser.Previous, "Can't have more than 255 parameters.");
                     }
-                    byte constantIndex = ParseVariable("Expect parameter name.");
-                    DefineVariable(constantIndex);
-                } while (Match(TokenType.COMMA));
+                    int constantIndex = ParseVariable(compile, "Expect parameter name.");
+                    DefineVariable(compile, constantIndex);
+                } while (parser.Match(TokenType.COMMA));
             }
 
-            Consume(TokenType.RIGHT_PAREN, "Expect ')' after parameters.");
-            Consume(TokenType.LEFT_BRACE, "Expect '{' before function body.");
+            parser.Consume(TokenType.RIGHT_PAREN, "Expect ')' after parameters.");
+            parser.Consume(TokenType.LEFT_BRACE, "Expect '{' before function body.");
 
-            Block();
+            Block(compile);
 
-            Function currentFunc = EndCompilerState();
-            EmitConstant(new Value(currentFunc));
+            Function currentFunc = EndCompilerState(compile);
+            EmitConstant(compile, new Value(currentFunc));
         }
 
-        private byte ParseCallArgumentList()
+        private static byte ParseCallArgumentList(CompileState compile)
         {
+            Parser parser = compile.Parser;
             byte argCount = 0;
-            if (!Check(TokenType.RIGHT_PAREN))
+            if (!parser.Check(TokenType.RIGHT_PAREN))
             {
                 do
                 {
-                    Expression();
+                    Expression(compile);
                     if (argCount > Byte.MaxValue)
                     {
-                        throw new CompilerException(_previousToken, "Can't have more than 255 arguments.");
+                        throw new CompilerException(parser.Previous, "Can't have more than 255 arguments.");
                     }
                     ++argCount;
-                } while (Match(TokenType.COMMA));
+                } while (parser.Match(TokenType.COMMA));
             }
-            Consume(TokenType.RIGHT_PAREN, "Expect ')' after arguments.");
+            parser.Consume(TokenType.RIGHT_PAREN, "Expect ')' after arguments.");
             return argCount;
         }
 
-        private void ParseClassMethod()
+        private static void ParseClassMethod(CompileState compile)
         {
-            Consume(TokenType.IDENTIFIER, "Expect method name.");
-            byte nameConstIndx = MakeConstant(new Value(_previousToken.Lexeme));
+            Parser parser = compile.Parser; 
+            parser.Consume(TokenType.IDENTIFIER, "Expect method name.");
+            int nameConstIndx = AddConstant(compile, new Value(parser.Previous.Lexeme));
 
-            FunctionType functionType = _previousToken.Lexeme == "init" ?
+            FunctionType functionType = parser.Previous.Lexeme == "init" ?
                 FunctionType.Initialized : FunctionType.ClassMethod;
 
-            ParseFunction(functionType);
+            ParseFunction(compile, functionType);
 
-            EmitBytes((byte)OpCode.CLASS_METHOD, nameConstIndx);
+            EmitOpWithShortArg(compile, OpCode.CLASS_METHOD, nameConstIndx);
         }
 
-        private void DefineVariable(byte global)
+        private static void DefineVariable(CompileState compile, int global)
         {
-            if (CurrentFunctionState.ScopeDepth > 0)
+            if (compile.ScopeDepth > 0)
             {
                 // mark variable initialized.
-                MarkLocalInitialized();
+                MarkLocalInitialized(compile);
                 return;
             }
-            EmitBytes((byte)OpCode.DEFINE_GLOBAL, global);
+            EmitOpWithShortArg(compile, OpCode.DEFINE_GLOBAL, global);
         }
 
-        private void DeclareVariable()
+        private static void DeclareVariable(CompileState compile)
         {
-            if (CurrentFunctionState.ScopeDepth == 0)
+            if (compile.ScopeDepth == 0)
             {
                 return;
             }
 
-            for (int i = CurrentFunctionState.LocalVars.Count - 1; i >= 0; --i)
+            for (int i = compile.LocalVars.Count - 1; i >= 0; --i)
             {
-                LocalVariabal local = CurrentFunctionState.LocalVars[i];
-                if (local.Depth != -1 && local.Depth < CurrentFunctionState.ScopeDepth)
+                LocalVariabal local = compile.LocalVars[i];
+                if (local.Depth != -1 && local.Depth < compile.ScopeDepth)
                 {
                     break;
                 }
 
-                if (_previousToken.Lexeme == local.Name)
+                if (compile.Parser.Previous.Lexeme == local.Name)
                 {
-                    throw new CompilerException(_previousToken, "Already a variable with this name in this scope.");
+                    throw new CompilerException(compile.Parser.Previous, "Already a variable with this name in this scope.");
                 }
             }
 
-            AddLocalVariable(_previousToken.Lexeme);
+            AddLocalVariable(compile, compile.Parser.Previous.Lexeme);
         }
 
-        private void MarkLocalInitialized()
+        private static void MarkLocalInitialized(CompileState compile)
         {
-            if (CurrentFunctionState.ScopeDepth == 0)
+            if (compile.ScopeDepth == 0)
             {
                 return;
             }
 
             // mark variable initialized.
-            CurrentFunctionState.LocalVars[CurrentFunctionState.LocalVars.Count - 1].Depth = CurrentFunctionState.ScopeDepth;
+            compile.LocalVars[compile.LocalVars.Count - 1].Depth = compile.ScopeDepth;
         }
 
-        private byte GetIdentifierIndex(string name)
+        private static int GetIdentifierIndex(CompileState compile, string name)
         {
-            if (_globalValueIndexs.TryGetValue(name, out var index))
+            if (compile.GlobalValueIndexs.TryGetValue(name, out var index))
             {
                 return (byte)index;
             }
 
-            int newIndex = _globalValues.Count;
-            _globalValues.Add(Value.Undefined(name));
-            _globalValueIndexs.Add(name, newIndex);
-            return (byte)newIndex;
+            int newIndex = compile.GlobalValues.Count;
+            compile.GlobalValues.Add(Value.Undefined(name));
+            compile.GlobalValueIndexs.Add(name, newIndex);
+            return newIndex;
         }
 
-        private void AddLocalVariable(string variableName)
+        private static void AddLocalVariable(CompileState compile, string variableName)
         {
-            if (CurrentFunctionState.LocalVars.Count == Byte.MaxValue + 1)
+            if (compile.LocalVars.Count == Byte.MaxValue + 1)
             {
-                throw new CompilerException(_previousToken, "Too many local variables in function.");
+                throw new CompilerException(compile.Parser.Previous, "Too many local variables in function.");
             }
 
             LocalVariabal local = new(variableName, -1);
-            CurrentFunctionState.LocalVars.Add(local);
+            compile.LocalVars.Add(local);
         }
 
-        private int ResolveLocalVar(FunctionCompileState state, string varName)
+        private static int ResolveLocalVar(CompileState compile, string varName)
         {
-            for (int i = state.LocalVars.Count - 1; i >= 0; --i)
+            for (int i = compile.LocalVars.Count - 1; i >= 0; --i)
             {
-                LocalVariabal local = state.LocalVars[i];
+                LocalVariabal local = compile.LocalVars[i];
                 if (local.Name == varName)
                 {
                     if (local.Depth == -1)
                     {
-                        throw new CompilerException(_previousToken,
+                        throw new CompilerException(compile.Parser.Previous,
                             "Can't read local variable in its own initializer.");
                     }
                     return i;
@@ -1107,17 +1143,18 @@ namespace LoxSharp.Core
             return -1;
         }
 
-        private void PatchJump(int offset)
+        private static void PatchJump(CompileState compile, int offset)
         {
-            int jump = CurrentChunk.Instructions.Count - offset - 2;
+            var instructions = compile.Function.Chunk.Instructions;
+            int jump = instructions.Count - offset - 2;
 
             if (jump > UInt16.MaxValue)
             {
-                throw new CompilerException(_previousToken, "Too much code to jump over.");
+                throw new CompilerException(compile.Parser.Previous, "Too much code to jump over.");
             }
 
-            CurrentChunk.Instructions[offset] = (byte)((jump >> 8) & 0xff);
-            CurrentChunk.Instructions[offset + 1] = (byte)(jump & 0xff);
+            instructions[offset] = (byte)((jump >> 8) & 0xff);
+            instructions[offset + 1] = (byte)(jump & 0xff);
         }
         #endregion
     }

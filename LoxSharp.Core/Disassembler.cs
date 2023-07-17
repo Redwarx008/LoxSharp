@@ -61,7 +61,7 @@ namespace LoxSharp.Core
             {
                 case OpCode.CONSTANT_8:
                     return ConstantInstruction(instruction, chunk, offset);
-                case OpCode.NIL:
+                case OpCode.NULL:
                 case OpCode.TRUE:
                 case OpCode.FALSE:
                 case OpCode.POP:

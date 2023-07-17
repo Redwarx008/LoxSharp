@@ -22,7 +22,7 @@ namespace LoxSharp.Core
             _keyWords["for"] = TokenType.FOR;
             _keyWords["fun"] = TokenType.FUN;
             _keyWords["if"] = TokenType.IF;
-            _keyWords["nil"] = TokenType.NIL;
+            _keyWords["nil"] = TokenType.NULL;
             _keyWords["or"] = TokenType.OR;
             _keyWords["print"] = TokenType.PRINT;
             _keyWords["return"] = TokenType.RETURN;
@@ -59,7 +59,7 @@ namespace LoxSharp.Core
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private Token ScanToken()
+        public Token ScanToken()
         {
             SkipWhitespace();
 

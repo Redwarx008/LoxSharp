@@ -5,7 +5,7 @@
         CONSTANT_8,
         CONSTANT_16,
 
-        NIL,
+        NULL,
         TRUE,
         FALSE,
 
