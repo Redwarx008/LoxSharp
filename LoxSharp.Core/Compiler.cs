@@ -6,15 +6,20 @@ namespace LoxSharp.Core
 {
     internal class Compiler
     {
+        private const int MAX_VARIABLE_NAME = 64;
         private delegate void ParseFunc(CompileState state, bool canAssign);
         private class Parser
         {
+            public VM VM { get; private set; }
+            public Module Module { get; private set; }
             public Token Previous { get; set; }
             public Token Current { get; set; }
 
             private Scanner _scanner;
-            public Parser(string source)
+            public Parser(VM vm, Module module, string source)
             {
+                VM = vm;
+                Module = module;
                 _scanner = new Scanner(source);
             }
 
@@ -114,8 +119,6 @@ namespace LoxSharp.Core
                 public List<int> BreakJumpStarts { get; set; } = new();
             }
             public List<LocalVariabal> LocalVars { get; private set; }
-            public Dictionary<string, int> GlobalValueIndexs { get; private set; }
-            public List<Value> GlobalValues { get; private set; }
             public Stack<ClassCompileState> ClassStates { get; private set; }
             public Stack<LoopState> LoopStates { get; private set; }
             public int ScopeDepth { get; set; } = 0;
@@ -199,14 +202,23 @@ namespace LoxSharp.Core
         public Compiler()
         {
             _functionStates = new Stack<CompileState>();
-            _globalValueIndexs = globalValueIndexs;
-            _globalValues = globalValues;
-
         }
 
-        public CompiledScript Compile(string source)
+        public static Function Compile(VM vm, string moduleName, string source)
         {
-            Parser parser = new Parser(source);
+            // See if the module has already been loaded.
+            Module? module = GetModule(vm, moduleName);
+            if (module == null)
+            {
+                module = new Module(moduleName);
+                // Store it in the VM's module registry so we don't load the same module
+                // multiple times.
+                vm.Modules[moduleName] = module;
+
+
+            }
+
+            Parser parser = new Parser(vm, module, source);
 
             CompileState compile = new(parser, FunctionType.Script);
 
@@ -217,8 +229,7 @@ namespace LoxSharp.Core
             }
 
             Function topFunction = EndCompilerState(compile);
-            CompiledScript compiled = new(topFunction);
-            return compiled;
+            return topFunction;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -392,6 +403,32 @@ namespace LoxSharp.Core
             return _rules[(int)type];
         }
 
+        /// <summary>
+        /// Looks up the previously loaded module with [moduleName].
+        /// </summary>
+        /// <returns>Returns <see langword="null"/> if no module with that name has been loaded.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Module? GetModule(VM vm, string moduleName)
+        {
+            vm.Modules.TryGetValue(moduleName, out Module? module);
+            return module;
+        }
+
+
+        private static void Error(CompileState compile, string message)
+        {
+            if (compile.Parser.VM.Config.PrintErrorFn == null)
+            {
+                return;
+            }
+
+            Token token = compile.Parser.Previous;
+            string moduleName = compile.Parser.Module.Name ?? "<unknown>";
+
+            compile.Parser.VM.Config.PrintErrorFn.Invoke(ErrorType.CompileError, 
+                moduleName, token.Line, message);
+        }
+
         #endregion
 
         #region Parse literal method
@@ -436,7 +473,7 @@ namespace LoxSharp.Core
             }
             else
             {
-                index = GetIdentifierIndex(compile, variableName);
+                index = GetVariableIndex(compile, variableName);
                 getOp = OpCode.GET_GLOBAL;
                 setOp = OpCode.SET_GLOBAL;
             }
@@ -895,7 +932,7 @@ namespace LoxSharp.Core
 
         private static void VarDeclaration(CompileState compile)
         {
-            int global = ParseVariable(compile, "Expect variable name.");
+            int global = DeclareNamedVariable(compile, "Expect variable name.");
 
             if (compile.Parser.Match(TokenType.EQUAL))
             {
@@ -911,7 +948,7 @@ namespace LoxSharp.Core
 
         private static void FunDeclaration(CompileState compile)
         {
-            int global = ParseVariable(compile, "Expect function name.");
+            int global = DeclareNamedVariable(compile, "Expect function name.");
             MarkLocalInitialized(compile);
             ParseFunction(compile, FunctionType.Function);
             DefineVariable(compile, global);
@@ -926,7 +963,7 @@ namespace LoxSharp.Core
             DeclareVariable(compile);
 
             EmitOpWithShortArg(compile, OpCode.CLASS, nameConstIndex);
-            DefineVariable(compile, GetIdentifierIndex(compile, className));
+            DefineVariable(compile, GetVariableIndex(compile, className));
 
             //_classStates.Push(new ClassCompileState());
 
@@ -974,9 +1011,9 @@ namespace LoxSharp.Core
 
         #region assistant method 
 
-        private static int ParseVariable(CompileState compile, string errorMessage)
+        private static int DeclareNamedVariable(CompileState compile, string errorMessage)
         {
-            compile.Parser.Consume(TokenType.IDENTIFIER, errorMessage);
+            compile.Parser.Consume(TokenType.IDENTIFIER, "");
 
             DeclareVariable(compile);
             if (compile.ScopeDepth > 0)
@@ -984,7 +1021,7 @@ namespace LoxSharp.Core
                 return 0;
             }
 
-            return GetIdentifierIndex(compile, compile.Parser.Previous.Lexeme);
+            return GetVariableIndex(compile, compile.Parser.Previous.Lexeme);
         }
 
         private static void ParseFunction(CompileState compile, FunctionType functionType)
@@ -1004,7 +1041,7 @@ namespace LoxSharp.Core
                     {
                         throw new CompilerException(parser.Previous, "Can't have more than 255 parameters.");
                     }
-                    int constantIndex = ParseVariable(compile, "Expect parameter name.");
+                    int constantIndex = DeclareNamedVariable(compile, "Expect parameter name.");
                     DefineVariable(compile, constantIndex);
                 } while (parser.Match(TokenType.COMMA));
             }
@@ -1063,11 +1100,23 @@ namespace LoxSharp.Core
             EmitOpWithShortArg(compile, OpCode.DEFINE_GLOBAL, global);
         }
 
-        private static void DeclareVariable(CompileState compile)
+        private static int DeclareVariable(CompileState compile)
         {
+            string varName = compile.Parser.Previous.Lexeme;
+            if (varName.Length > MAX_VARIABLE_NAME)
+            {
+                Error(compile, $"Variable name cannot be longer than {MAX_VARIABLE_NAME} characters.");
+            }
+
+            // Top-level module scope.
             if (compile.ScopeDepth == 0)
             {
-                return;
+                Module module = compile.Parser.Module;
+
+                if (module.VariableIndexes.ContainsKey(varName))
+                {
+                    Error(compile, "Module variable is already defined.");
+                }
             }
 
             for (int i = compile.LocalVars.Count - 1; i >= 0; --i)
@@ -1078,13 +1127,13 @@ namespace LoxSharp.Core
                     break;
                 }
 
-                if (compile.Parser.Previous.Lexeme == local.Name)
+                if (varName == local.Name)
                 {
-                    throw new CompilerException(compile.Parser.Previous, "Already a variable with this name in this scope.");
+                    Error(compile, "Already a variable with this name in this scope.");
                 }
             }
 
-            AddLocalVariable(compile, compile.Parser.Previous.Lexeme);
+            AddLocalVariable(compile, varName);
         }
 
         private static void MarkLocalInitialized(CompileState compile)
@@ -1098,17 +1147,20 @@ namespace LoxSharp.Core
             compile.LocalVars[compile.LocalVars.Count - 1].Depth = compile.ScopeDepth;
         }
 
-        private static int GetIdentifierIndex(CompileState compile, string name)
+        /// <summary>
+        /// Get the index of variables in the module.
+        /// </summary>
+        /// <returns> If the variable is not declared, return <see langword="-1"/> </returns>
+        private static int GetVariableIndex(Module module, string varName)
         {
-            if (compile.GlobalValueIndexs.TryGetValue(name, out var index))
+            if (module.VariableIndexes.TryGetValue(varName, out var index))
             {
-                return (byte)index;
+                return index;
             }
-
-            int newIndex = compile.GlobalValues.Count;
-            compile.GlobalValues.Add(Value.Undefined(name));
-            compile.GlobalValueIndexs.Add(name, newIndex);
-            return newIndex;
+            else
+            {
+                return -1;
+            }
         }
 
         private static void AddLocalVariable(CompileState compile, string variableName)

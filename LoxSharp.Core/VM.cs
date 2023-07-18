@@ -30,9 +30,18 @@ namespace LoxSharp.Core
 
         internal Dictionary<string, Module> Modules { get; private set; }
 
-        public VM()
+        public ScriptConfiguration Config { get; private set; } 
+
+        public VM(ScriptConfiguration config)
         {
-            _globalValues = globalValues;
+            Modules = new Dictionary<string, Module>();
+            Config = config;
+        }
+
+        public VM() 
+        {
+            Modules = new Dictionary<string, Module>();
+            Config = null;
         }
 
         internal void Interpret(CompiledScript compiledScript)
@@ -44,6 +53,12 @@ namespace LoxSharp.Core
             _currentConstants = callframe.Function.Chunk.Constants;
             _callFrames.Push(callframe);
             Run();
+        }
+
+        private void InitCoreModule()
+        {
+            Module coreModule = new Module("core");
+            Modules[coreModule.Name] = coreModule;
         }
 
         private void Run()
