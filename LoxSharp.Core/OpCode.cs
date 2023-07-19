@@ -13,8 +13,8 @@
         GET_LOCAL,
         SET_LOCAL,
         DEFINE_MODULE_VAR,
-        GET_GLOBAL,
-        SET_GLOBAL,
+        GET_MODULE_VAR,
+        SET_MODULE_VAR,
         GET_PROPERTY,
         SET_PROPERTY,
         GET_INDEX,
@@ -42,7 +42,7 @@
 
         CALL,
         INVOKE,
-        CLASS,
+        DEFINE_CLASS,
         CLASS_METHOD,
         RETURN
     }

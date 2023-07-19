@@ -11,7 +11,7 @@ namespace LoxSharp.Core
         /// <summary>
         /// The name of the module.
         /// </summary>
-        public string? Name { get; private set; }
+        public string Name { get; private set; }
 
         /// <summary>
         /// The currently defined top-level variables.
@@ -25,12 +25,6 @@ namespace LoxSharp.Core
         public Module(string name)
         {
             Name = name;
-            Variables = new List<Value>();
-            VariableIndexes = new Dictionary<string, int>();
-        }
-
-        public Module()
-        {
             Variables = new List<Value>();
             VariableIndexes = new Dictionary<string, int>();
         }

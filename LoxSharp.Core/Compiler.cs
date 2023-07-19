@@ -1,5 +1,3 @@
-using System.Diagnostics;
-using System.Numerics;
 using System.Runtime.CompilerServices;
 
 namespace LoxSharp.Core
@@ -10,14 +8,19 @@ namespace LoxSharp.Core
         private const int MAX_VARIABLE_NAME = 64;
         private const int MAX_MODULE_VARS = 65536;
         private const int MAX_LOCAL_VARS = 256;
+        private const int MAX_PARAMETERS = 16;
         private delegate void ParseFunc(CompileState state, bool canAssign);
         private class Parser
         {
             public VM VM { get; private set; }
             public Module Module { get; private set; }
-            public Token Previous { get; set; }
-            public Token Current { get; set; }
+            public ref Token Previous => ref _previous;
+            public ref Token Current => ref _current;
             public bool HasError { get; set; } = false;
+
+            private Token _previous;
+
+            private Token _current;
 
             private Scanner _scanner;
             public Parser(VM vm, Module module, string source)
@@ -35,15 +38,16 @@ namespace LoxSharp.Core
             }
 
             [method: MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public void Consume(TokenType type, string message)
+            public void Consume(TokenType expected, string message)
             {
-                if (Current.Type == type)
+                Advance();
+                if (Previous.Type != expected)
                 {
-                    Advance();
-                }
-                else
-                {
-                    throw new CompilerException(Current, message);
+                    Error(message);
+
+                    // If the next token is the one we want, assume the current one is just a
+                    // spurious error and discard it to minimize the number of cascaded errors.
+                    if (Current.Type == expected) Advance();    
                 }
             }
 
@@ -63,14 +67,29 @@ namespace LoxSharp.Core
                 Advance();
                 return true;
             }
+
+            private void Error(string message)
+            {
+                HasError = true;
+
+                if (VM.Config.PrintErrorFn == null)
+                {
+                    return;
+                }
+
+                string moduleName = Module.Name ?? "<unknown>";
+
+                VM.Config.PrintErrorFn.Invoke(ErrorType.CompileError,
+                    moduleName, Previous.Line, message);
+            }
         }
 
         private enum FunctionType
         {
-            Function,
+            ModuleFunction,
             ClassMethod,
             Initialized,
-            Script
+            Script  // top-level
         }
 
         private enum Precedence
@@ -123,7 +142,7 @@ namespace LoxSharp.Core
                 public List<int> BreakJumpStarts { get; set; } = new();
             }
             public List<LocalVariabal> LocalVars { get; private set; }
-            public Stack<ClassCompileState> ClassStates { get; private set; }
+            public ClassCompileInfo? EnclosingClass { get; set; }
             public Stack<LoopState> LoopStates { get; private set; }
             public int ScopeDepth { get; set; } = 0;
             public FunctionType FunctionType { get; private set; }
@@ -131,7 +150,6 @@ namespace LoxSharp.Core
             public Parser Parser { get; private set; }
             public CompileState(Parser parser, FunctionType functionType)
             {
-                ClassStates = new Stack<ClassCompileState>();
                 LocalVars = new List<LocalVariabal>(16);
                 LoopStates = new Stack<LoopState>();
                 Function = new Function();
@@ -148,15 +166,12 @@ namespace LoxSharp.Core
                 }
             }
         }
-        internal struct ClassCompileState
+        internal class ClassCompileInfo
         {
 
         }
 
         private static readonly ParseRule[] _rules;
-
-        private Stack<CompileState> _functionStates;
-
         static Compiler()
         {
             _rules = new ParseRule[Enum.GetValues(typeof(TokenType)).Length];
@@ -203,12 +218,8 @@ namespace LoxSharp.Core
             _rules[(int)TokenType.WHILE] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.EOF] = new ParseRule(null, null, Precedence.None);
         }
-        public Compiler()
-        {
-            _functionStates = new Stack<CompileState>();
-        }
 
-        public static Function Compile(VM vm, string moduleName, string source)
+        public static Function? Compile(VM vm, string moduleName, string source)
         {
             // See if the module has already been loaded.
             Module? module = GetModule(vm, moduleName);
@@ -233,8 +244,7 @@ namespace LoxSharp.Core
                 Definition(compile);
             }
 
-            Function topFunction = EndCompilerState(compile);
-            return topFunction;
+            return EndCompile(compile);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -275,12 +285,13 @@ namespace LoxSharp.Core
         //}
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static Function EndCompilerState(CompileState compile)
+        private static Function? EndCompile(CompileState compile)
         {
+            if (compile.Parser.HasError) return null;
 #if DEBUG
-            Disassembler disassembler = Disassembler.Instance;
-            disassembler.DisassembleFunction(compile.Function, compile.GlobalValues);
-            Console.Write(disassembler.GetText());
+            //Disassembler disassembler = Disassembler.Instance;
+            //disassembler.DisassembleFunction(compile.Function, compile.GlobalValues);
+            //Console.Write(disassembler.GetText());
 #endif
             EmitReturn(compile);
             return compile.Function;
@@ -374,6 +385,7 @@ namespace LoxSharp.Core
             }
             else
             {
+                // Implicitly return null. 
                 EmitOp(compile, OpCode.NULL);
             }
 
@@ -427,18 +439,18 @@ namespace LoxSharp.Core
 
         private static void Error(CompileState compile, string message)
         {
-            compile.Parser.HasError = true;
+            Parser parser = compile.Parser;
+            parser.HasError = true;
 
-            if (compile.Parser.VM.Config.PrintErrorFn == null)
+            if (parser.VM.Config.PrintErrorFn == null)
             {
                 return;
             }
 
-            Token token = compile.Parser.Previous;
-            string moduleName = compile.Parser.Module.Name ?? "<unknown>";
+            string moduleName = parser.Module.Name ?? "<unknown>";
 
-            compile.Parser.VM.Config.PrintErrorFn.Invoke(ErrorType.CompileError, 
-                moduleName, token.Line, message);
+            parser.VM.Config.PrintErrorFn.Invoke(ErrorType.CompileError, 
+                moduleName, parser.Previous.Line, message);
         }
 
         #endregion
@@ -485,9 +497,9 @@ namespace LoxSharp.Core
             }
             else
             {
-                index = GetVariableIndex(compile, variableName);
-                getOp = OpCode.GET_GLOBAL;
-                setOp = OpCode.SET_GLOBAL;
+                index = ResolveModuleVar(compile.Parser.Module, variableName);
+                getOp = OpCode.GET_MODULE_VAR;
+                setOp = OpCode.SET_MODULE_VAR;
             }
 
             if (canAssign && compile.Parser.Match(TokenType.EQUAL))
@@ -621,9 +633,9 @@ namespace LoxSharp.Core
 
         private static void This(CompileState compile, bool canAssign)
         {
-            if (compile.ClassStates.Count == 0)
+            if (compile.EnclosingClass == null)
             {
-                throw new CompilerException(compile.Parser.Previous, "Can't use 'this' outside of a class.");
+                Error(compile, "Can't use 'this' outside of a class.");
             }
 
             Variable(compile, false);
@@ -633,7 +645,7 @@ namespace LoxSharp.Core
         {
             Parser parser = compile.Parser;
             int arrayIndex = compile.GlobalValueIndexs[nameof(Array)];
-            EmitOpWithShortArg(compile, OpCode.GET_GLOBAL, arrayIndex);
+            EmitOpWithShortArg(compile, OpCode.GET_MODULE_VAR, arrayIndex);
             // initialization list
             byte argCount = 0;
             if (!parser.Check(TokenType.RIGHT_BRACKET))
@@ -938,7 +950,7 @@ namespace LoxSharp.Core
             }
             else if (parser.Match(TokenType.IMPORT))
             {
-                ImportDefinition(compile);  
+                ImportStatement(compile);  
             }
             else
             {
@@ -946,7 +958,7 @@ namespace LoxSharp.Core
             }
         }
 
-        private static void ImportDefinition(CompileState compile) 
+        private static void ImportStatement(CompileState compile) 
         { 
             Parser parser = compile.Parser;
 
@@ -981,7 +993,10 @@ namespace LoxSharp.Core
             }
 
             parser.Consume(TokenType.FROM, "Expect 'from' after variables.");
-            parser.Consume(TokenType.STRING, "Expect a module name.")
+            parser.Consume(TokenType.STRING, "Expect a module name.");
+            int moduleNameConst = AddConstant(compile, new Value(parser.Previous.Lexeme));
+            // Load the module by name.
+            EmitOpWithShortArg(compile, OpCode.IMPORT_MODULE, moduleNameConst);
         }
 
         private static void VarDefinition(CompileState compile)
@@ -1016,22 +1031,23 @@ namespace LoxSharp.Core
         {
             int global = DeclareNamedVariable(compile, "Expect function name.");
             MarkLocalInitialized(compile);
-            ParseFunction(compile, FunctionType.Function);
+            ParseFunction(compile, FunctionType.ModuleFunction);
             DefineVariable(compile, global);
         }
 
         private static void ClassDefinition(CompileState compile)
         {
             Parser parser = compile.Parser;
+
             parser.Consume(TokenType.IDENTIFIER, "Expect class name.");
             string className = parser.Previous.Lexeme;
             int nameConstIndex = AddConstant(compile, new Value(parser.Previous.Lexeme));
-            DeclareVariable(compile);
+            int globalIndex = DeclareVariable(compile, className);
 
-            EmitOpWithShortArg(compile, OpCode.CLASS, nameConstIndex);
-            DefineVariable(compile, GetVariableIndex(compile, className));
+            EmitOpWithShortArg(compile, OpCode.DEFINE_CLASS, nameConstIndex);
+            DefineVariable(compile, globalIndex);
 
-            //_classStates.Push(new ClassCompileState());
+            compile.EnclosingClass = new ClassCompileInfo();
 
             NamedVariable(compile, className, false);
             parser.Consume(TokenType.LEFT_BRACE, "Expect '{' before class body.");
@@ -1044,7 +1060,7 @@ namespace LoxSharp.Core
             parser.Consume(TokenType.RIGHT_BRACE, "Expect '}' after class body.");
             EmitOp(compile, OpCode.POP);
 
-            //_classStates.Pop();
+            compile.EnclosingClass = null;
         }
 
         private static void ParsePrecedence(CompileState compile, Precedence precedence)
@@ -1079,9 +1095,9 @@ namespace LoxSharp.Core
 
         private static void ParseFunction(CompileState compile, FunctionType functionType)
         {
-            //BeginCompilerState(functionType);
+            CompileState currentCompile = new CompileState(compile.Parser, functionType);
             Parser parser = compile.Parser; 
-            BeginScope(compile);
+            BeginScope(currentCompile);
 
             parser.Consume(TokenType.LEFT_PAREN, "Expect '(' after function name.");
 
@@ -1089,23 +1105,26 @@ namespace LoxSharp.Core
             {
                 do
                 {
-                    ++compile.Function.Arity;
-                    if (compile.Function.Arity > Byte.MaxValue)
+                    ++currentCompile.Function.Arity;
+                    if (currentCompile.Function.Arity > 16)
                     {
                         throw new CompilerException(parser.Previous, "Can't have more than 255 parameters.");
                     }
-                    int constantIndex = DeclareNamedVariable(compile, "Expect parameter name.");
-                    DefineVariable(compile, constantIndex);
+                    int constantIndex = DeclareNamedVariable(currentCompile, "Expect parameter name.");
+                    DefineVariable(currentCompile, constantIndex);
                 } while (parser.Match(TokenType.COMMA));
             }
 
             parser.Consume(TokenType.RIGHT_PAREN, "Expect ')' after parameters.");
             parser.Consume(TokenType.LEFT_BRACE, "Expect '{' before function body.");
 
-            Block(compile);
+            Block(currentCompile);
 
-            Function currentFunc = EndCompilerState(compile);
-            EmitConstant(compile, new Value(currentFunc));
+            Function? compiledFunc = EndCompile(currentCompile);
+            if (compiledFunc != null)
+            {
+                EmitConstant(compile, new Value(compiledFunc));
+            }
         }
 
         private static byte ParseCallArgumentList(CompileState compile)
@@ -1223,14 +1242,14 @@ namespace LoxSharp.Core
             }
 
             // mark variable initialized.
-            compile.LocalVars[compile.LocalVars.Count - 1].Depth = compile.ScopeDepth;
+            compile.LocalVars[^1].Depth = compile.ScopeDepth;
         }
 
         /// <summary>
         /// Get the index of variables in the module.
         /// </summary>
         /// <returns> If the variable is not declared, return <see langword="-1"/> </returns>
-        private static int GetVariableIndex(Module module, string varName)
+        private static int ResolveModuleVar(Module module, string varName)
         {
             if (module.VariableIndexes.TryGetValue(varName, out var index))
             {

@@ -122,7 +122,7 @@ namespace LoxSharp.Core
                             _globalValues[index] = _stack.Pop();
                             break;
                         }
-                    case OpCode.GET_GLOBAL:
+                    case OpCode.GET_MODULE_VAR:
                         {
                             int index = ReadUShort(ref frame);
                             Value val = _globalValues[index];
@@ -134,9 +134,10 @@ namespace LoxSharp.Core
                             {
                                 _stack.Push(val);
                             }
+
                             break;
                         }
-                    case OpCode.SET_GLOBAL:
+                    case OpCode.SET_MODULE_VAR:
                         {
                             int index = ReadUShort(ref frame);
                             Value val = _globalValues[index];
@@ -318,7 +319,7 @@ namespace LoxSharp.Core
                             _stack.Push(result);
                             break;
                         }
-                    case OpCode.CLASS:
+                    case OpCode.DEFINE_CLASS:
                         {
                             string className = ReadConstant16(ref frame).AsString;
                             _stack.Push(new Value(new InternalClass(className)));
