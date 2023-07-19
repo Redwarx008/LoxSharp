@@ -86,7 +86,7 @@ namespace LoxSharp.Core
                     return InvokeInstruction(instruction, chunk, offset);
                 case OpCode.GET_GLOBAL:
                 case OpCode.SET_GLOBAL:
-                case OpCode.DEFINE_GLOBAL:
+                case OpCode.DEFINE_MODULE_VAR:
                     return GlobalValueInstruction(instruction, chunk, offset, globalValues);
                 case OpCode.GET_PROPERTY:
                 case OpCode.SET_PROPERTY:

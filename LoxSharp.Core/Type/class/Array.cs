@@ -34,7 +34,7 @@ namespace LoxSharp.Core
         private Value Add(ClassInstance instance, Value[] args)
         {
             ((ArrayInstance)instance).Values.Add(args[0]);
-            return Value.Null;
+            return Value.NUll;
         }
     }
 }

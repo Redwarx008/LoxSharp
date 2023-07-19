@@ -12,13 +12,17 @@
         POP,
         GET_LOCAL,
         SET_LOCAL,
-        DEFINE_GLOBAL,
+        DEFINE_MODULE_VAR,
         GET_GLOBAL,
         SET_GLOBAL,
         GET_PROPERTY,
         SET_PROPERTY,
         GET_INDEX,
         SET_INDEX,
+
+        IMPORT_MODULE,
+        IMPORT_VARIABLE,
+        IMPORT_ALL_VARIABLE,
 
         EQUAL,
         GREATER,

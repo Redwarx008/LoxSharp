@@ -116,7 +116,7 @@ namespace LoxSharp.Core
                             _stack[slot] = _stack.Peek();
                             break;
                         }
-                    case OpCode.DEFINE_GLOBAL:
+                    case OpCode.DEFINE_MODULE_VAR:
                         {
                             int index = ReadUShort(ref frame);
                             _globalValues[index] = _stack.Pop();

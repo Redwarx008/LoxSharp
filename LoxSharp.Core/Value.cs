@@ -399,6 +399,6 @@ namespace LoxSharp.Core
             return new Value(default, ValueType.Undefined, name);
         }
 
-        public static Value Null => new Value();
+        public static Value NUll => new Value();
     }
 }

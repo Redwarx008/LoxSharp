@@ -18,7 +18,7 @@
         // Keywords.
         AND, CLASS, ELSE, FALSE, FUN, FOR, IF, NULL, OR,
         PRINT, RETURN, SUPER, THIS, TRUE, VAR, WHILE,
-        CONTINUE, BREAK,
+        CONTINUE, BREAK, IMPORT, AS, FROM,
 
         EOF
     }
