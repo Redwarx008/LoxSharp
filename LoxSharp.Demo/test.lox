@@ -41,25 +41,21 @@
 //     log(str);
 // }
 
-// class Test
-// {
-//     init()
-//     {
-//         // this.name = "jianglei";
-//     }
-//     fudd()
-//     {
-//         // this.ddd = 555;
-//     }
-// }
+class Test
+{
+    init()
+    {
+        this.name = "jianglei";
+    }
+}
 
-// var a = Test();
-// // a.fudd();
-// log (a.name);
+var a = Test();
+// a.fudd();
+Print (a.name);
 
-var a = [1, 2, 3, 4, 5];
-// var method = a.Add;
-// method(1);
-a[0] = 8;
-Print (a[0]);
+// var a = [1, 2, 3, 4, 5];
+// // var method = a.Add;
+// // method(1);
+// a[0] = 8;
+// Print (a[0]);
 

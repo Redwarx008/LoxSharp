@@ -99,7 +99,7 @@ namespace LoxSharp.Core
             ModuleFunction,
             ClassMethod,
             Initialized,
-            Script  // top-level
+            Moudle  // top-level
         }
 
         private enum Precedence
@@ -158,13 +158,15 @@ namespace LoxSharp.Core
             public FunctionType FunctionType { get; private set; }
             public Function Function { get; private set; }
             public Parser Parser { get; private set; }
-            public CompileState(Parser parser, FunctionType functionType)
+            public CompileState? EnclosingCompile { get; set; }
+            public CompileState(Parser parser, CompileState? enclosingCompile, FunctionType functionType)
             {
                 LocalVars = new List<LocalVariabal>(16);
                 LoopStates = new Stack<LoopState>();
                 Function = new Function(parser.Module);
                 FunctionType = functionType;
                 Parser = parser;
+                EnclosingCompile = enclosingCompile;
                 // In the VM, stack slot 0 stores the calling function. 
                 if (functionType == FunctionType.ClassMethod || functionType == FunctionType.Initialized)
                 {
@@ -173,6 +175,15 @@ namespace LoxSharp.Core
                 else
                 {
                     LocalVars.Add(new LocalVariabal("PlaceHolder", 0));
+                }
+
+                if (functionType == FunctionType.Moudle)
+                {
+                    Function.Name = parser.Module.Name; 
+                }
+                else
+                {
+                    Function.Name = parser.Previous.Lexeme;
                 }
             }
         }
@@ -250,7 +261,7 @@ namespace LoxSharp.Core
 
             Parser parser = new Parser(vm, module, source);
 
-            CompileState compile = new(parser, FunctionType.Script);
+            CompileState compile = new(parser, null, FunctionType.Moudle);
 
             parser.Advance();
             while (!parser.Match(TokenType.EOF))
@@ -394,7 +405,7 @@ namespace LoxSharp.Core
         {
             if (compile.FunctionType == FunctionType.Initialized)
             {
-                EmitBytes(compile, (byte)OpCode.GET_LOCAL, 0);
+                EmitOpWithShortArg(compile, OpCode.GET_LOCAL, 0);
             }
             else
             {
@@ -656,7 +667,7 @@ namespace LoxSharp.Core
 
         private static void This(CompileState compile, bool canAssign)
         {
-            if (compile.EnclosingClass == null)
+            if (GetEnclosingClass(compile) == null)
             {
                 Error(compile, "Can't use 'this' outside of a class.");
             }
@@ -773,7 +784,7 @@ namespace LoxSharp.Core
         private static void ReturnStatement(CompileState compile)
         {
             Parser parser = compile.Parser; 
-            if (compile.FunctionType == FunctionType.Script)
+            if (compile.FunctionType == FunctionType.Moudle)
             {
                 throw new CompilerException(parser.Previous, "Can't return from top-level code.");
             }
@@ -1123,7 +1134,7 @@ namespace LoxSharp.Core
 
         private static void ParseFunction(CompileState compile, FunctionType functionType)
         {
-            CompileState currentCompile = new CompileState(compile.Parser, functionType);
+            CompileState currentCompile = new CompileState(compile.Parser, compile, functionType);
             Parser parser = compile.Parser; 
             BeginScope(currentCompile);
 
@@ -1334,6 +1345,16 @@ namespace LoxSharp.Core
 
             instructions[offset] = (byte)((jump >> 8) & 0xff);
             instructions[offset + 1] = (byte)(jump & 0xff);
+        }
+
+        private static ClassCompileInfo? GetEnclosingClass(CompileState? compile)
+        {
+            while (compile != null)
+            {
+                if (compile.EnclosingClass != null) return compile.EnclosingClass;
+                compile = compile.EnclosingCompile;
+            }
+            return null;
         }
         #endregion
     }
