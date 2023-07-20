@@ -3,25 +3,31 @@ using System.Diagnostics;
 
 namespace LoxSharp.Core
 {
+    public enum InterpretResult
+    {
+        Success,
+        CompileError,
+        RuntimeError,
+    }
     public class ScriptEngine
     {
-        private readonly Compiler _compiler;
-        public ScriptEngine()
+        private ScriptEngine()
         {
-            _compiler = new();
+
         }
 
-        public void Run(VM vm, string src)
-        { 
+        public static ScriptEngine GetInstance { get; private set; } = new ScriptEngine();
 
-            
-
-            var compiledScript = _compiler.Compile(src);
-
-
-
+        public InterpretResult Run(VM vm, string src)
+        {
+            var tokenList = new Scanner(src).ScanSource();
+            var compiledScript = Compiler.Compile(vm, "main", src);
+            if (compiledScript == null)
+            {
+                return InterpretResult.CompileError;
+            }
             vm.Interpret(compiledScript);
-
+            return InterpretResult.Success;
         }
 
         //public void SetGlobal(string name, Value value)

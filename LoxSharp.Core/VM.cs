@@ -16,39 +16,61 @@ namespace LoxSharp.Core
         }
     }
 
+    internal class Coroutine
+    {
+        public ValueStack<CallFrame> CallFrames { get; private set; }
+        public ValueStack<Value> Stack { get; private set; }
+        /// <summary>
+        /// The fiber that ran this one. If this fiber is yielded, control will resume to this one.
+        /// </summary>
+        public Coroutine? Caller { get; set; }
+
+        public Coroutine(Function function)
+        {
+            CallFrames = new ValueStack<CallFrame>(VM.FRAME_MAX);
+            Stack = new ValueStack<Value>(VM.STACK_MAX);
+
+            CallFrames.Push(new CallFrame(function, Stack.Count));
+            // The first slot always holds the function.
+            Stack.Push(new Value(function));
+        }
+    }
+
     public class VM
     {
-        private const int STACK_MAX = 256;
-        private const int FRAME_MAX = 64;
+        internal const int STACK_MAX = 256;
+        internal const int FRAME_MAX = 64;
 
         private ValueStack<CallFrame> _callFrames = new(FRAME_MAX);
         private ValueStack<Value> _stack = new(FRAME_MAX * STACK_MAX);
-        private List<Value> _globalValues = null!;
 
         private List<byte> _currentInstructions = null!;
         private List<Value> _currentConstants = null!;
 
-        internal Dictionary<string, Module> Modules { get; private set; }
+        internal Module? LastLoadedModule { get; private set; }
+        internal Dictionary<string, Module> LoadedModules { get; private set; }
 
         public ScriptConfiguration Config { get; private set; } 
 
         public VM(ScriptConfiguration config)
         {
-            Modules = new Dictionary<string, Module>();
+            LoadedModules = new Dictionary<string, Module>();
             Config = config;
+            InitCoreModule();
         }
 
         public VM() 
         {
-            Modules = new Dictionary<string, Module>();
-            Config = null;
+            LoadedModules = new Dictionary<string, Module>();
+            Config = new ScriptConfiguration();
+            InitCoreModule();
         }
 
-        internal void Interpret(CompiledScript compiledScript)
+        internal void Interpret(Function compiledScript)
         {
-            _stack.Push(new Value(compiledScript.Main));
+            _stack.Push(new Value(compiledScript));
 
-            CallFrame callframe = new(compiledScript.Main, 0);
+            CallFrame callframe = new(compiledScript, 0);
             _currentInstructions = callframe.Function.Chunk.Instructions;
             _currentConstants = callframe.Function.Chunk.Constants;
             _callFrames.Push(callframe);
@@ -57,8 +79,16 @@ namespace LoxSharp.Core
 
         private void InitCoreModule()
         {
-            Module coreModule = new Module("core");
-            Modules[coreModule.Name] = coreModule;
+            Module coreModule = new Module(string.Empty);
+            LoadedModules[coreModule.Name] = coreModule;
+            coreModule.AddVariable(this, nameof(Array), new Value(new Array()));
+            HostFunction printFunc = new("Print", (args) =>
+            {
+                if (Config.WriteFunction == null) return Value.NUll;
+                Config.WriteFunction.Invoke(args[0].ToString());
+                return Value.NUll;
+            });
+            coreModule.AddVariable(this, printFunc.Name, new Value(printFunc));
         }
 
         private void Run()
@@ -67,14 +97,8 @@ namespace LoxSharp.Core
             {
                 ref CallFrame frame = ref _callFrames.Peek();
 #if DEBUG
-                Disassembler disassembler = Disassembler.Instance;
-
-                if (disassembler != null)
-                {
-                    disassembler.DisassembleStack(_stack);
-                    disassembler.DisassembleInstruction(frame.Function.Chunk, frame.Ip, _globalValues);
-                    Console.Write(disassembler.GetText());
-                }
+                Disassembler.DisassembleStack(_stack);
+                Disassembler.DisassembleInstruction(frame.Function.Chunk, frame.Ip, frame.Function.Module.Variables);
 #endif
                 OpCode instruction = (OpCode)ReadByte(ref frame);
 
@@ -119,16 +143,16 @@ namespace LoxSharp.Core
                     case OpCode.DEFINE_MODULE_VAR:
                         {
                             int index = ReadUShort(ref frame);
-                            _globalValues[index] = _stack.Pop();
+                            frame.Function.Module.Variables[index] = _stack.Pop();
                             break;
                         }
                     case OpCode.GET_MODULE_VAR:
                         {
                             int index = ReadUShort(ref frame);
-                            Value val = _globalValues[index];
+                            Value val = frame.Function.Module.Variables[index];
                             if (val.IsUndefined)
                             {
-                                ThrowRuntimeError($"Undefined variable '{val.AsString}'");
+                                RuntimeError($"Undefined variable '{val.AsString}'");
                             }
                             else
                             {
@@ -140,14 +164,14 @@ namespace LoxSharp.Core
                     case OpCode.SET_MODULE_VAR:
                         {
                             int index = ReadUShort(ref frame);
-                            Value val = _globalValues[index];
+                            Value val = frame.Function.Module.Variables[index];
                             if (val.IsUndefined)
                             {
-                                ThrowRuntimeError($"Undefined variable '{val.AsString}'");
+                                RuntimeError($"Undefined variable '{val.AsString}'");
                             }
                             else
                             {
-                                _globalValues[index] = _stack.Peek(0);
+                                frame.Function.Module.Variables[index] = _stack.Peek(0);
                             }
                             break;
                         }
@@ -155,7 +179,7 @@ namespace LoxSharp.Core
                         {
                             if (!_stack.Peek().IsInstance)
                             {
-                                ThrowRuntimeError("Only instances have properties.");
+                                RuntimeError("Only instances have properties.");
                             }
 
                             ClassInstance instance = _stack.Peek().AsInstance;
@@ -174,7 +198,7 @@ namespace LoxSharp.Core
                         {
                             if (!_stack.Peek(1).IsInstance)
                             {
-                                ThrowRuntimeError("Only instances have fields.");
+                                RuntimeError("Only instances have fields.");
                             }
 
                             ClassInstance instance = _stack.Peek(1).AsInstance;
@@ -191,7 +215,7 @@ namespace LoxSharp.Core
                             }
                             else
                             {
-                                ThrowRuntimeError($"undefined property {fieldName}");
+                                RuntimeError($"undefined property {fieldName}");
                             }
                             break;
                         }
@@ -203,7 +227,7 @@ namespace LoxSharp.Core
                                     {
                                         if (!_stack.Peek().IsNumber)
                                         {
-                                            ThrowRuntimeError("Expects a number to use as an index.");
+                                            RuntimeError("Expects a number to use as an index.");
                                         }
                                         double index = _stack.Peek().AsDouble;
                                         _stack.Discard(2);
@@ -212,7 +236,7 @@ namespace LoxSharp.Core
                                     }
                                 // todo map
                                 default:
-                                    ThrowRuntimeError("Only arrays and maps can use index.");
+                                    RuntimeError("Only arrays and maps can use index.");
                                     break;
                             }
                             break;  
@@ -225,13 +249,13 @@ namespace LoxSharp.Core
                                     {
                                         if (!_stack.Peek(1).IsNumber)
                                         {
-                                            ThrowRuntimeError("Expects a number to use as an index.");
+                                            RuntimeError("Expects a number to use as an index.");
                                         }
                                         double index = _stack.Peek(1).AsDouble;
 
                                         if (index >= arrayInstance.Values.Count)
                                         {
-                                            ThrowRuntimeError("Array index out of bounds.");
+                                            RuntimeError("Array index out of bounds.");
                                         }
 
                                         ref Value val = ref _stack.Peek();
@@ -242,7 +266,7 @@ namespace LoxSharp.Core
                                     }
                                     // todo map
                                     default :
-                                    ThrowRuntimeError("Only arrays and maps can use index.");
+                                    RuntimeError("Only arrays and maps can use index.");
                                     break;
                             }
                             break;
@@ -262,7 +286,7 @@ namespace LoxSharp.Core
                     case OpCode.NEGATE:
                         if (!_stack.Peek().IsNumber)
                         {
-                            ThrowRuntimeError("Operand must be a number.");
+                            RuntimeError("Operand must be a number.");
                         }
                         // _stack.Push(new Value(-_stack.Pop().AsDouble));
                         _stack.Peek() = new Value(-_stack.Peek().AsDouble);
@@ -334,6 +358,23 @@ namespace LoxSharp.Core
                             _stack.Pop();
                             break;
                         }
+                    case OpCode.IMPORT_MODULE:
+                        {
+                            string moduleName = ReadConstant16(ref frame).AsString; 
+                            _stack.Push(ImportModule(moduleName));
+                            // If we get a function, call it to execute the module body.
+                            if (_stack.Peek().IsFunction)
+                            {
+                                CallInternalFunction(_stack.Peek().AsFunction, 0);
+                            }
+                            else
+                            {
+                                // The module has already been loaded. Remember it so we can import
+                                // variables from it if needed.
+                                LastLoadedModule = _stack.Peek().AsModule;
+                            }
+                            break;
+                        }
                 }
             }
         }
@@ -382,7 +423,7 @@ namespace LoxSharp.Core
                     res = a > b;
                     if (res.IsNull)
                     {
-                        ThrowRuntimeError("Operands must be numbers.");
+                        RuntimeError("Operands must be numbers.");
                     }
                     _stack.Push(res);
                     break;
@@ -390,7 +431,7 @@ namespace LoxSharp.Core
                     res = a < b;
                     if (res.IsNull)
                     {
-                        ThrowRuntimeError("Operands must be numbers.");
+                        RuntimeError("Operands must be numbers.");
                     }
                     _stack.Push(res);
                     break;
@@ -398,7 +439,7 @@ namespace LoxSharp.Core
                     res = a + b;
                     if (res.IsNull)
                     {
-                        ThrowRuntimeError("Operands must be numbers or left operand is string.");
+                        RuntimeError("Operands must be numbers or left operand is string.");
                     }
                     _stack.Push(res);
                     break;
@@ -406,7 +447,7 @@ namespace LoxSharp.Core
                     res = a - b;
                     if (res.IsNull)
                     {
-                        ThrowRuntimeError("Operands must be numbers.");
+                        RuntimeError("Operands must be numbers.");
                     }
                     _stack.Push(res);
                     break;
@@ -414,7 +455,7 @@ namespace LoxSharp.Core
                     res = a * b;
                     if (res.IsNull)
                     {
-                        ThrowRuntimeError("Operands must be numbers.");
+                        RuntimeError("Operands must be numbers.");
                     }
                     _stack.Push(res);
                     break;
@@ -422,7 +463,7 @@ namespace LoxSharp.Core
                     res = a / b;
                     if (res.IsNull)
                     {
-                        ThrowRuntimeError("Operands must be numbers.");
+                        RuntimeError("Operands must be numbers.");
                     }
                     _stack.Push(res);
                     break;
@@ -446,7 +487,7 @@ namespace LoxSharp.Core
                     CallHostFunction(callee.AsHostFunction, argCount);  
                     break;
                 default:
-                    ThrowRuntimeError("Can only call functions and classes.");
+                    RuntimeError("Can only call functions and classes.");
                     break;// Non-callable object type.
             }
         }
@@ -456,7 +497,7 @@ namespace LoxSharp.Core
             ref Value receiver = ref _stack.Peek(argCount);
             if (!receiver.IsInstance)
             {
-                ThrowRuntimeError("Only instances have methods.");
+                RuntimeError("Only instances have methods.");
             }
             ClassInstance instance = receiver.AsInstance;
             if (instance.Fields.TryGetValue(methodName, out var field))
@@ -468,7 +509,7 @@ namespace LoxSharp.Core
             {
                 if (!instance.Class.Methods.TryGetValue(methodName, out var method))
                 {
-                    ThrowRuntimeError($"Undefined method {methodName}");
+                    RuntimeError($"Undefined method {methodName}");
                 }
                 else
                 {
@@ -489,7 +530,7 @@ namespace LoxSharp.Core
         {
             if (!internalClass.Methods.TryGetValue(methodName, out var method))
             {
-                ThrowRuntimeError($"Undefined method {methodName}");
+                RuntimeError($"Undefined method {methodName}");
             }
             else
             {
@@ -509,12 +550,14 @@ namespace LoxSharp.Core
         {
             if (argCount != function.Arity)
             {
-                ThrowRuntimeError($"Expected {function.Arity} arguments but got {argCount}.");
+                RuntimeError($"Expected {function.Arity} arguments but got {argCount}.");
+                return;
             }
 
             if (_callFrames.Count == FRAME_MAX)
             {
-                ThrowRuntimeError("Stack overflow.");
+                RuntimeError("Stack overflow.");
+                return;
             }
 
             CallFrame callFrame = new(function, _stack.Count - argCount - 1) { Class = scriptClass };
@@ -559,7 +602,7 @@ namespace LoxSharp.Core
             }
             else if (argCount != 0)
             {
-                ThrowRuntimeError($"Expected 0 arguments but got {argCount}");
+                RuntimeError($"Expected 0 arguments but got {argCount}");
             }
         }
 
@@ -567,7 +610,7 @@ namespace LoxSharp.Core
         {
             if (!internalClass.Methods.TryGetValue(methodName, out var method))
             {
-                ThrowRuntimeError($"Undefined method '{methodName}'");
+                RuntimeError($"Undefined method '{methodName}'");
             }
             else
             {
@@ -604,9 +647,40 @@ namespace LoxSharp.Core
             _stack.Push(result);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void ThrowRuntimeError(string message)
+        private Value ImportModule(string moduleName)
         {
+            // If the module is already loaded, we don't need to do anything.
+            if (LoadedModules.TryGetValue(moduleName, out var module)) 
+            {
+                return new Value(module);
+            }
+
+            if (Config.LoadMuduleFunction == null)
+            {
+                RuntimeError($"Could not load module '{moduleName}'. Unable to find a method to load the module.");
+                return Value.NUll;
+            }
+
+            string src = Config.LoadMuduleFunction.Invoke(moduleName);
+            Function? compiled = Compiler.Compile(this, moduleName, src);
+            if (compiled == null)
+            {
+                RuntimeError($"Could not compile module {moduleName}.");
+                return Value.NUll;
+            }
+            return new Value(compiled);
+        }
+
+        private void AppendCallFrame()
+        {
+
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void RuntimeError(string message)
+        {
+            if (Config.PrintErrorFn == null) return;
+
             string errorMsg = $"Runtime error : {message}\n";
             // print method call stack.
             for (int i = _callFrames.Count - 1; i >= 0; --i)
@@ -631,7 +705,8 @@ namespace LoxSharp.Core
                     }  
                 }
             }
-            throw new RuntimeException(errorMsg);
+            //throw new RuntimeException(errorMsg);
+            Config.PrintErrorFn.Invoke(ErrorType.RuntimeError, string.Empty, -1, errorMsg);
         }
         #endregion
 

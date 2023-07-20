@@ -10,6 +10,7 @@ namespace LoxSharp.Core
     {
         CompileError,
         RuntimeError,
+        OtherError
     }
     /// <summary>
     /// Loads and returns the source code for the module.

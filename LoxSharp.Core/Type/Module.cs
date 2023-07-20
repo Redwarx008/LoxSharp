@@ -28,10 +28,23 @@ namespace LoxSharp.Core
             Variables = new List<Value>();
             VariableIndexes = new Dictionary<string, int>();
         }
-        
-        public void AddVariable(Value varibale)
-        {
 
+        /// <summary>
+        /// Add top-level variables to the module 
+        /// </summary>
+        /// <param name="vm"> Used to report errors </param>
+        public void AddVariable(VM vm, string varName, Value val)
+        {
+            if (VariableIndexes.ContainsKey(varName))
+            {
+                vm.Config.PrintErrorFn?.Invoke(ErrorType.OtherError, Name, -1, 
+                    $"A variable named {varName} already exists.");
+                return;
+            }
+
+            int index = Variables.Count;
+            VariableIndexes[varName] = index;
+            Variables.Add(val);
         }
     }
 }

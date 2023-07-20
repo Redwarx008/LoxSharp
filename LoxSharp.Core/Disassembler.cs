@@ -4,56 +4,38 @@ namespace LoxSharp.Core
 {
     internal class Disassembler
     {
-        public static Disassembler Instance => _disassembler;
-
-        private static Disassembler _disassembler = new();
-        private StringBuilder _sb = new();
-
-        private Disassembler()
+        public static void DisassembleFunction(Function function)
         {
-
-        }
-
-        public string GetText()
-        {
-            string txt = _sb.ToString();
-            _sb.Clear();
-            return txt;
-        }
-
-        public void DisassembleFunction(Function function, List<Value> globalValues)
-        {
-            _sb.Clear();
-            _sb.Append($"== {function.Name} ==\n");
+            Console.Write($"== {function.Name} ==\n");
             for (int offset = 0; offset < function.Chunk.Instructions.Count;)
             {
-                offset = DisassembleInstruction(function.Chunk, offset, globalValues);
+                offset = DisassembleInstruction(function.Chunk, offset, function.Module.Variables);
             }
         }
 
-        public void DisassembleStack(ValueStack<Value> stack)
+        public static void DisassembleStack(ValueStack<Value> stack)
         {
-            _sb.Append("          ");
+            Console.Write("          ");
             for (int i = 0; i < stack.Count; ++i)
             {
-                _sb.Append($"[{stack[i]}]");
+                Console.Write($"[{stack[i]}]");
             }
-            _sb.Append('\n');
+            Console.Write('\n');
         }
 
-        public int DisassembleInstruction(Chunk chunk, int offset, List<Value> globalValues)
+        public static int DisassembleInstruction(Chunk chunk, int offset, List<Value> variables)
         {
             // offset
-            _sb.Append(offset.ToString("0000"));
+            Console.Write(offset.ToString("0000"));
 
             // line number
             if (offset > 0 && chunk.GetLineNumber(offset) == chunk.GetLineNumber(offset - 1))
             {
-                _sb.Append("   | ");
+                Console.Write("   | ");
             }
             else
             {
-                _sb.Append($"{chunk.GetLineNumber(offset),4} ");
+                Console.Write($"{chunk.GetLineNumber(offset),4} ");
             }
 
             OpCode instruction = (OpCode)chunk.Instructions[offset];
@@ -87,7 +69,7 @@ namespace LoxSharp.Core
                 case OpCode.GET_MODULE_VAR:
                 case OpCode.SET_MODULE_VAR:
                 case OpCode.DEFINE_MODULE_VAR:
-                    return GlobalValueInstruction(instruction, chunk, offset, globalValues);
+                    return ModuleVariableInstruction(instruction, chunk, offset, variables);
                 case OpCode.GET_PROPERTY:
                 case OpCode.SET_PROPERTY:
                 case OpCode.DEFINE_CLASS:
@@ -99,59 +81,59 @@ namespace LoxSharp.Core
                 case OpCode.LOOP:
                     return JumpInstruction(instruction, -1, chunk, offset);
                 default:
-                    _sb.Append($"Unknown opcode {instruction.ToString()}");
+                    Console.Write($"Unknown opcode {instruction.ToString()}");
                     return offset + 1;
             }
         }
 
-        private int ConstantInstruction(OpCode instruction, Chunk chunk, int offset)
+        private static int ConstantInstruction(OpCode instruction, Chunk chunk, int offset)
         {
             byte constant = chunk.Instructions[offset + 1];
-            _sb.Append($"{instruction.ToString(),-16}{constant,4}");
-            _sb.Append($"    {chunk.Constants[constant].ToString()}");
-            _sb.Append('\n');
+            Console.Write($"{instruction.ToString(),-16}{constant,4}");
+            Console.Write($"    {chunk.Constants[constant].ToString()}");
+            Console.Write('\n');
             return offset + 2;
         }
 
-        private int InvokeInstruction(OpCode instruction, Chunk chunk, int offset)
+        private static int InvokeInstruction(OpCode instruction, Chunk chunk, int offset)
         {
             byte constant = chunk.Instructions[offset + 1];
             byte argCount = chunk.Instructions[offset + 2];
-            _sb.Append($"{instruction.ToString(),-16}({argCount,4}) args ");
-            _sb.Append($"{constant,4}\n");
+            Console.Write($"{instruction.ToString(),-16}({argCount,4}) args ");
+            Console.Write($"{constant,4}\n");
             return offset + 3;
         }
 
-        private int SimpleInstruction(OpCode instruction, int offset)
+        private static int SimpleInstruction(OpCode instruction, int offset)
         {
-            _sb.Append(instruction.ToString());
-            _sb.Append('\n');
+            Console.Write(instruction.ToString());
+            Console.Write('\n');
             return offset + 1;
         }
 
-        private int ByteInstruction(OpCode instruction, Chunk chunk, int offset)
+        private static int ByteInstruction(OpCode instruction, Chunk chunk, int offset)
         {
             byte slot = chunk.Instructions[offset + 1];
-            _sb.Append($"{instruction.ToString(),-16}{slot,4}\n");
+            Console.Write($"{instruction.ToString(),-16}{slot,4}\n");
             return offset + 2;
         }
 
-        private int JumpInstruction(OpCode instruction, int direction, Chunk chunk, int offset)
+        private static int JumpInstruction(OpCode instruction, int direction, Chunk chunk, int offset)
         {
             var high = chunk.Instructions[offset + 1] << 8;
             var low = chunk.Instructions[offset + 2];
             ushort jump = (ushort)(high | low);
 
-            _sb.Append($"{instruction.ToString(),-16}{offset,4} -> {offset + 3 + direction * jump}\n");
+            Console.Write($"{instruction.ToString(),-16}{offset,4} -> {offset + 3 + direction * jump}\n");
             return offset + 3;
         }
 
-        private int GlobalValueInstruction(OpCode instruction, Chunk chunk, int offset, List<Value> globalValues) 
+        private static int ModuleVariableInstruction(OpCode instruction, Chunk chunk, int offset, List<Value> variables) 
         {
             byte index = chunk.Instructions[offset + 1];
-            _sb.Append($"{instruction.ToString(),-16}{index,4}");
-            _sb.Append($"    {globalValues[index].ToString()}");
-            _sb.Append('\n');
+            Console.Write($"{instruction.ToString(),-16}{index,4}");
+            Console.Write($"    {variables[index].ToString()}");
+            Console.Write('\n');
             return offset + 2;
         }
     }

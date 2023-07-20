@@ -4,7 +4,7 @@ namespace LoxSharp.Demo
 {
     internal class Program
     {
-        private static ScriptEngine engine = new ScriptEngine();
+        private static ScriptEngine engine = ScriptEngine.GetInstance;
         static void Main(string[] args)
         {
 
@@ -40,32 +40,26 @@ namespace LoxSharp.Demo
         }
         private static void Run(string source)
         {
-            engine.AddGlobalFunction("log", (Value[] args) =>
+            ScriptConfiguration configuration = new ScriptConfiguration()
             {
-                Console.Write(args[0]);
-                return new Value();
-            });
-            try
+                PrintErrorFn = PrintError,
+                WriteFunction = Console.Write
+            };
+            VM vM = new VM(configuration);
+            engine.Run(vM, source);
+        }
+
+        private static void PrintError(ErrorType errorType, string moduleName, int line, string message)
+        {
+            switch (errorType) 
             {
-                engine.Run(source);
-                //engine.CallFunction("Test", new Value("hello world"));
+                case ErrorType.CompileError:
+                    Console.WriteLine($"Compile error : [{moduleName} line {line}] {message}");
+                    break;  
+                case ErrorType.RuntimeError:
+                    Console.WriteLine($"Runtime error : [{moduleName} line {line}] {message}");
+                    break;
             }
-            catch (ScannerException e)
-            {
-                Console.WriteLine(e.Message);
-            }
-            catch (CompilerException e)
-            {
-                Console.WriteLine(e.Message);
-            }
-            catch (RuntimeException e)
-            {
-                Console.WriteLine(e.Message);
-            }
-            //catch (Exception e) 
-            //{ 
-            //    Console.WriteLine(e.Message);
-            //}
         }
     }
 }

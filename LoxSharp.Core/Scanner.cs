@@ -39,7 +39,7 @@ namespace LoxSharp.Core
         {
             _source = source;
         }
-        public List<Token> ScanSource()
+        public  List<Token> ScanSource()
         {
             var tokens = new List<Token>();
             while (!IsAtEnd())
