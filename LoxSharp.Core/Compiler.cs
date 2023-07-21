@@ -7,7 +7,7 @@ namespace LoxSharp.Core
         private const int MAX_CONSTANTS = 65536;
         private const int MAX_VARIABLE_NAME = 64;
         private const int MAX_MODULE_VARS = 65536;
-        private const int MAX_LOCAL_VARS = 256;
+        private const int MAX_LOCAL_VARS = 65536;
         private const int MAX_PARAMETERS = 16;
         private delegate void ParseFunc(CompileState state, bool canAssign);
         private class Parser
@@ -210,6 +210,7 @@ namespace LoxSharp.Core
             _rules[(int)TokenType.SEMICOLON] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.SLASH] = new ParseRule(null, Binary, Precedence.Factor);
             _rules[(int)TokenType.STAR] = new ParseRule(null, Binary, Precedence.Factor);
+            _rules[(int)TokenType.PERCENT] = new ParseRule(null, Binary, Precedence.Factor);
             _rules[(int)TokenType.BANG] = new ParseRule(Unary, null, Precedence.None);
             _rules[(int)TokenType.BANG_EQUAL] = new ParseRule(null, Binary, Precedence.Equality);
             _rules[(int)TokenType.EQUAL] = new ParseRule(null, null, Precedence.None);
@@ -230,7 +231,6 @@ namespace LoxSharp.Core
             _rules[(int)TokenType.IF] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.NULL] = new ParseRule(Literal, null, Precedence.None);
             _rules[(int)TokenType.OR] = new ParseRule(null, Or, Precedence.Or);
-            _rules[(int)TokenType.PRINT] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.RETURN] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.SUPER] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.THIS] = new ParseRule(This, null, Precedence.None);
@@ -397,7 +397,7 @@ namespace LoxSharp.Core
                 throw new CompilerException(compile.Parser.Previous, "Loop body too large.");
             }
 
-            EmitShort(compile, 0xff);
+            EmitShort(compile, offset);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -460,7 +460,7 @@ namespace LoxSharp.Core
             return module;
         }
 
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void Error(CompileState compile, string message)
         {
             Parser parser = compile.Parser;
@@ -491,6 +491,7 @@ namespace LoxSharp.Core
 
         #region Parse literal method
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void Literal(CompileState compile, bool canAssign)
         {
             switch (compile.Parser.Previous.Type)
@@ -514,11 +515,14 @@ namespace LoxSharp.Core
                 default: return; // Unreachable.
             }
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void Variable(CompileState compile, bool canAssign)
         {
             NamedVariable(compile, compile.Parser.Previous.Lexeme, canAssign);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void NamedVariable(CompileState compile, string variableName, bool canAssign)
         {
             OpCode getOp, setOp;
@@ -536,6 +540,11 @@ namespace LoxSharp.Core
                 setOp = OpCode.SET_MODULE_VAR;
             }
 
+            if (index == -1)
+            {
+                Error(compile, $"The name '{variableName}' does not exist in the current context.");
+            }
+
             if (canAssign && compile.Parser.Match(TokenType.EQUAL))
             {
                 Expression(compile);
@@ -546,6 +555,8 @@ namespace LoxSharp.Core
                 EmitOpWithShortArg(compile, getOp, index);
             }
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void Unary(CompileState compile, bool canAssign)
         {
             TokenType operatorType = compile.Parser.Previous.Type;
@@ -566,6 +577,7 @@ namespace LoxSharp.Core
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void Binary(CompileState compile, bool canAssign)
         {
             TokenType operatorType = compile.Parser.Previous.Type;
@@ -604,10 +616,14 @@ namespace LoxSharp.Core
                 case TokenType.SLASH:
                     EmitOp(compile, OpCode.DIVIDE);
                     break;
+                case TokenType.PERCENT:
+                    EmitOp(compile, OpCode.MOD);
+                    break;
                 default: return; // Unreachable.
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void Call(CompileState compile, bool canAssgin)
         {
             byte argCount = ParseCallArgumentList(compile);
@@ -637,12 +653,14 @@ namespace LoxSharp.Core
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void Grouping(CompileState compile, bool canAssign)
         {
             Expression(compile);
             compile.Parser.Consume(TokenType.RIGHT_PAREN, "Expect ')' after expression.");
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void And(CompileState compile, bool canAssign)
         {
             int endJump = EmitJump(compile, OpCode.JUMP_IF_FALSE);
@@ -653,6 +671,7 @@ namespace LoxSharp.Core
             PatchJump(compile, endJump);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void Or(CompileState compile, bool canAssign)
         {
             int elseJump = EmitJump(compile, OpCode.JUMP_IF_FALSE);
@@ -665,6 +684,7 @@ namespace LoxSharp.Core
             PatchJump(compile, endJump);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void This(CompileState compile, bool canAssign)
         {
             if (GetEnclosingClass(compile) == null)
@@ -675,6 +695,7 @@ namespace LoxSharp.Core
             Variable(compile, false);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void ArrayCreate(CompileState compile, bool canAssign)
         {
             Parser parser = compile.Parser;
@@ -699,6 +720,7 @@ namespace LoxSharp.Core
             EmitOpWithArg(compile, OpCode.CALL, argCount);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void ArrayOrMapIndex(CompileState compile, bool canAssign)
         {
             Expression(compile);
@@ -718,6 +740,7 @@ namespace LoxSharp.Core
 
         #region Parse expression or statement method
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void Block(CompileState compile)
         {
             Parser parser = compile.Parser; 
@@ -732,17 +755,21 @@ namespace LoxSharp.Core
         /// We simply parse the lowest precedence level, 
         /// which subsumes all of the higher-precedence expressions too. 
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void Expression(CompileState compile)
         {
             ParsePrecedence(compile, Precedence.Assignment);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void ExpressionStatement(CompileState compile)
         {
             Expression(compile);
             compile.Parser.Consume(TokenType.SEMICOLON, "Expect ';' after expression.");
             EmitOp(compile, OpCode.POP);
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void Statement(CompileState compile)
         {
             Parser parser = compile.Parser;
@@ -781,6 +808,8 @@ namespace LoxSharp.Core
                 ExpressionStatement(compile);
             }
         }
+
+
         private static void ReturnStatement(CompileState compile)
         {
             Parser parser = compile.Parser; 
@@ -806,6 +835,7 @@ namespace LoxSharp.Core
             }
         }
 
+
         private static void ContinueStatement(CompileState compile)
         {
             if (compile.LoopStates.Count == 0)
@@ -826,6 +856,7 @@ namespace LoxSharp.Core
             // Jump to top of current innermost loop.
             EmitLoop(compile, compile.LoopStates.Peek().LoopStart);
         }
+
 
         private static void BreakStatement(CompileState compile)
         {
@@ -848,6 +879,7 @@ namespace LoxSharp.Core
             int exitJumpStart = EmitJump(compile, OpCode.JUMP);
             compile.LoopStates.Peek().BreakJumpStarts.Add(exitJumpStart);
         }
+
 
         private static void WhileStatement(CompileState compile)
         {
@@ -1040,17 +1072,10 @@ namespace LoxSharp.Core
         private static void VarDefinition(CompileState compile)
         {
             Parser parser = compile.Parser;
-            // Grab its name, but don't declare it yet. A (local) variable shouldn't be
-            // in scope in its own initializer.
-            // t To avoid this situation 
-            //  var a = "outer";
-            //  {
-            //    var a = a;
-            //  }
-            parser.Consume(TokenType.IDENTIFIER, "Expect variable name.");
-            string varName = parser.Previous.Lexeme;
 
-            if (compile.Parser.Match(TokenType.EQUAL))
+            int global = DeclareNamedVariable(compile, "Expect variable name.");
+
+            if (parser.Match(TokenType.EQUAL))
             {
                 Expression(compile);
             }
@@ -1059,10 +1084,9 @@ namespace LoxSharp.Core
                 // Default initialize it to null. 
                 EmitOp(compile, OpCode.NULL);
             }
-            compile.Parser.Consume(TokenType.SEMICOLON, "Expect ';' after variable declaration.");
+            parser.Consume(TokenType.SEMICOLON, "Expect ';' after variable declaration.");
 
-            int globalIndex = DeclareVariable(compile, varName);
-            DefineVariable(compile, globalIndex);
+            DefineVariable(compile, global);
         }
 
         private static void FunDefinition(CompileState compile)
@@ -1206,6 +1230,7 @@ namespace LoxSharp.Core
             // in the correct slot on the stack already so we're done.
             if (compile.ScopeDepth > 0)
             {
+                MarkLocalInitialized(compile);
                 return;
             }
             EmitOpWithShortArg(compile, OpCode.DEFINE_MODULE_VAR, global);
@@ -1229,12 +1254,15 @@ namespace LoxSharp.Core
             module.Variables.Add(val);
             return index;
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static int DeclareNamedVariable(CompileState compile, string errorMessage)
         {
-            compile.Parser.Consume(TokenType.IDENTIFIER, "Expect variable name.");
+            compile.Parser.Consume(TokenType.IDENTIFIER, errorMessage);
 
             return DeclareVariable(compile, compile.Parser.Previous.Lexeme);
         }
+
         private static int DeclareVariable(CompileState compile, string varName)
         {
             if (varName.Length > MAX_VARIABLE_NAME)
@@ -1245,7 +1273,7 @@ namespace LoxSharp.Core
             // Top-level module scope.
             if (compile.ScopeDepth == 0)
             {
-                int index =  DefineModuleVariable(compile.Parser.Module, varName, Value.NUll);
+                int index =  DefineModuleVariable(compile.Parser.Module, varName, Value.Undefined(varName));
 
                 if (index == -1)
                 {
@@ -1262,7 +1290,7 @@ namespace LoxSharp.Core
             for (int i = compile.LocalVars.Count - 1; i >= 0; --i)
             {
                 LocalVariabal local = compile.LocalVars[i];
-                if (local.Depth < compile.ScopeDepth)
+                if (local.Depth != -1 && local.Depth < compile.ScopeDepth)
                 {
                     break;
                 }
@@ -1282,6 +1310,7 @@ namespace LoxSharp.Core
             return AddLocalVariable(compile, varName);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void MarkLocalInitialized(CompileState compile)
         {
             if (compile.ScopeDepth == 0)
@@ -1297,6 +1326,7 @@ namespace LoxSharp.Core
         /// Get the index of variables in the module.
         /// </summary>
         /// <returns> If the variable is not declared, return <see langword="-1"/> </returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static int ResolveModuleVar(Module module, string varName)
         {
             if (module.VariableIndexes.TryGetValue(varName, out var index))
@@ -1309,6 +1339,7 @@ namespace LoxSharp.Core
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static int AddLocalVariable(CompileState compile, string variableName)
         {
             LocalVariabal local = new(variableName, -1);
@@ -1317,6 +1348,7 @@ namespace LoxSharp.Core
             return index;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static int ResolveLocalVar(CompileState compile, string varName)
         {
             for (int i = compile.LocalVars.Count - 1; i >= 0; --i)
@@ -1324,6 +1356,10 @@ namespace LoxSharp.Core
                 LocalVariabal local = compile.LocalVars[i];
                 if (local.Name == varName)
                 {
+                    if (local.Depth == -1)
+                    {
+                        Error(compile, $"Use of unassigned local variable '{local.Name}'.");
+                    }
                     return i;
                 }
             }
@@ -1333,6 +1369,7 @@ namespace LoxSharp.Core
             return -1;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void PatchJump(CompileState compile, int offset)
         {
             var instructions = compile.Function.Chunk.Instructions;
@@ -1347,6 +1384,7 @@ namespace LoxSharp.Core
             instructions[offset + 1] = (byte)(jump & 0xff);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static ClassCompileInfo? GetEnclosingClass(CompileState? compile)
         {
             while (compile != null)

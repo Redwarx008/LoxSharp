@@ -1,10 +1,10 @@
 ﻿using LoxSharp.Core;
+using System.Diagnostics;
 
 namespace LoxSharp.Demo
 {
     internal class Program
     {
-        private static ScriptEngine engine = ScriptEngine.GetInstance;
         static void Main(string[] args)
         {
 
@@ -46,7 +46,7 @@ namespace LoxSharp.Demo
                 WriteFunction = Console.Write
             };
             VM vM = new VM(configuration);
-            engine.Run(vM, source);
+            ScriptEngine.Run(vM, source);
         }
 
         private static void PrintError(ErrorType errorType, string moduleName, int line, string message)

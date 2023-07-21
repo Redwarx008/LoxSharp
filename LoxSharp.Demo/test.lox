@@ -18,7 +18,7 @@
 // var zoo = Zoo();
 // var sum = 0;
 
-// while (sum < 100000000) {
+// while (sum < 100000) {
 //   sum = sum + zoo.ant()
 //             + zoo.banana()
 //             + zoo.tuna()
@@ -26,11 +26,7 @@
 //             + zoo.grass()
 //             + zoo.mouse();
 // }
-// while(sum < 100000000)
-// {
-//   sum = sum + 6;
-// }
-// print sum;
+// Print(sum);
 
 // fun Test()
 // {
@@ -41,17 +37,20 @@
 //     log(str);
 // }
 
-class Test
-{
-    init()
-    {
-        this.name = "jianglei";
-    }
-}
+// class Test
+// {
+//     init()
+//     {
+//         this.name = "jianglei";
+//     }
+//     change()
+//     {
+//         this.namde = 555;
+//     }
+// }
 
-var a = Test();
-// a.fudd();
-Print (a.name);
+//  a.change();
+// Print (a.name);
 
 // var a = [1, 2, 3, 4, 5];
 // // var method = a.Add;
@@ -59,3 +58,11 @@ Print (a.name);
 // a[0] = 8;
 // Print (a[0]);
 
+// var sum = 0;
+// var i = 0;
+// while(i < 100000)
+// {
+//     sum = sum + i;
+//     i = i + 1;
+// }
+// Print(sum);

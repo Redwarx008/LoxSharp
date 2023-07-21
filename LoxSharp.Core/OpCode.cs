@@ -32,6 +32,7 @@
         SUBTRACT,
         MULTIPLY,
         DIVIDE,
+        MOD,
         NOT,
 
         NEGATE,

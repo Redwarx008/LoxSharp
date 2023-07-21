@@ -11,23 +11,14 @@ namespace LoxSharp.Core
     }
     public class ScriptEngine
     {
-        private ScriptEngine()
+        public static InterpretResult Run(VM vm, string src)
         {
-
-        }
-
-        public static ScriptEngine GetInstance { get; private set; } = new ScriptEngine();
-
-        public InterpretResult Run(VM vm, string src)
-        {
-            var tokenList = new Scanner(src).ScanSource();
             var compiledScript = Compiler.Compile(vm, "main", src);
             if (compiledScript == null)
             {
                 return InterpretResult.CompileError;
             }
-            vm.Interpret(compiledScript);
-            return InterpretResult.Success;
+            return vm.Interpret(compiledScript);
         }
 
         //public void SetGlobal(string name, Value value)

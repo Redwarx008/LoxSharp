@@ -66,7 +66,7 @@ namespace LoxSharp.Core
             InitCoreModule();
         }
 
-        internal void Interpret(Function compiledScript)
+        internal InterpretResult Interpret(Function compiledScript)
         {
             _stack.Push(new Value(compiledScript));
 
@@ -74,7 +74,7 @@ namespace LoxSharp.Core
             _currentInstructions = callframe.Function.Chunk.Instructions;
             _currentConstants = callframe.Function.Chunk.Constants;
             _callFrames.Push(callframe);
-            Run();
+            return Run();
         }
 
         private void InitCoreModule()
@@ -82,6 +82,7 @@ namespace LoxSharp.Core
             Module coreModule = new Module(string.Empty);
             LoadedModules[coreModule.Name] = coreModule;
             coreModule.AddVariable(this, nameof(Array), new Value(new Array()));
+
             HostFunction printFunc = new("Print", (args) =>
             {
                 if (Config.WriteFunction == null) return Value.NUll;
@@ -89,9 +90,15 @@ namespace LoxSharp.Core
                 return Value.NUll;
             });
             coreModule.AddVariable(this, printFunc.Name, new Value(printFunc));
+
+            //HostFunction GetClock = new("GetClock", (args) =>
+            //{
+            //    return new Value(DateTime.Now.TimeOfDay.TotalMilliseconds);
+            //});
+            //coreModule.AddVariable(this, GetClock.Name, new Value(GetClock));
         }
 
-        private void Run()
+        private InterpretResult Run()
         {
             while (true)
             {
@@ -152,7 +159,8 @@ namespace LoxSharp.Core
                             Value val = frame.Function.Module.Variables[index];
                             if (val.IsUndefined)
                             {
-                                RuntimeError($"Undefined variable '{val.AsString}'");
+                                RuntimeError($"Use of unassigned module variable '{val.AsString}'");
+                                return InterpretResult.RuntimeError;
                             }
                             else
                             {
@@ -167,7 +175,8 @@ namespace LoxSharp.Core
                             Value val = frame.Function.Module.Variables[index];
                             if (val.IsUndefined)
                             {
-                                RuntimeError($"Undefined variable '{val.AsString}'");
+                                RuntimeError($"Use of unassigned module variable '{val.AsString}'");
+                                return InterpretResult.RuntimeError;
                             }
                             else
                             {
@@ -180,6 +189,7 @@ namespace LoxSharp.Core
                             if (!_stack.Peek().IsInstance)
                             {
                                 RuntimeError("Only instances have properties.");
+                                return InterpretResult.RuntimeError;
                             }
 
                             ClassInstance instance = _stack.Peek().AsInstance;
@@ -199,6 +209,7 @@ namespace LoxSharp.Core
                             if (!_stack.Peek(1).IsInstance)
                             {
                                 RuntimeError("Only instances have fields.");
+                                return InterpretResult.RuntimeError;
                             }
 
                             ClassInstance instance = _stack.Peek(1).AsInstance;
@@ -215,7 +226,8 @@ namespace LoxSharp.Core
                             }
                             else
                             {
-                                RuntimeError($"undefined property {fieldName}");
+                                RuntimeError($"undefined property '{fieldName}'");
+                                return InterpretResult.RuntimeError;
                             }
                             break;
                         }
@@ -228,6 +240,7 @@ namespace LoxSharp.Core
                                         if (!_stack.Peek().IsNumber)
                                         {
                                             RuntimeError("Expects a number to use as an index.");
+                                            return InterpretResult.RuntimeError;
                                         }
                                         double index = _stack.Peek().AsDouble;
                                         _stack.Discard(2);
@@ -237,7 +250,7 @@ namespace LoxSharp.Core
                                 // todo map
                                 default:
                                     RuntimeError("Only arrays and maps can use index.");
-                                    break;
+                                    return InterpretResult.RuntimeError;
                             }
                             break;  
                         }
@@ -250,12 +263,14 @@ namespace LoxSharp.Core
                                         if (!_stack.Peek(1).IsNumber)
                                         {
                                             RuntimeError("Expects a number to use as an index.");
+                                            return InterpretResult.RuntimeError;
                                         }
                                         double index = _stack.Peek(1).AsDouble;
 
                                         if (index >= arrayInstance.Values.Count)
                                         {
                                             RuntimeError("Array index out of bounds.");
+                                            return InterpretResult.RuntimeError;
                                         }
 
                                         ref Value val = ref _stack.Peek();
@@ -267,7 +282,7 @@ namespace LoxSharp.Core
                                     // todo map
                                     default :
                                     RuntimeError("Only arrays and maps can use index.");
-                                    break;
+                                    return InterpretResult.RuntimeError;
                             }
                             break;
                         }
@@ -278,7 +293,11 @@ namespace LoxSharp.Core
                     case OpCode.SUBTRACT:
                     case OpCode.MULTIPLY:
                     case OpCode.DIVIDE:
-                        BinaryOperator(instruction);
+                    case OpCode.MOD:
+                        if (!BinaryOperator(instruction))
+                        {
+                            return InterpretResult.RuntimeError;
+                        }
                         break;
                     case OpCode.NOT:
                         _stack.Push(!_stack.Pop());
@@ -287,6 +306,7 @@ namespace LoxSharp.Core
                         if (!_stack.Peek().IsNumber)
                         {
                             RuntimeError("Operand must be a number.");
+                            return InterpretResult.RuntimeError;
                         }
                         // _stack.Push(new Value(-_stack.Pop().AsDouble));
                         _stack.Peek() = new Value(-_stack.Peek().AsDouble);
@@ -333,7 +353,7 @@ namespace LoxSharp.Core
                             if (_callFrames.Count == 0)
                             {
                                 _ = _stack.Pop();
-                                return;
+                                return InterpretResult.Success;
                             }
 
                             _currentInstructions = _callFrames.Peek().Function.Chunk.Instructions;
@@ -408,7 +428,7 @@ namespace LoxSharp.Core
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void BinaryOperator(OpCode op)
+        private bool BinaryOperator(OpCode op)
         {
             Value b = _stack.Pop();
             Value a = _stack.Pop();
@@ -424,6 +444,7 @@ namespace LoxSharp.Core
                     if (res.IsNull)
                     {
                         RuntimeError("Operands must be numbers.");
+                        return false;
                     }
                     _stack.Push(res);
                     break;
@@ -432,6 +453,7 @@ namespace LoxSharp.Core
                     if (res.IsNull)
                     {
                         RuntimeError("Operands must be numbers.");
+                        return false;
                     }
                     _stack.Push(res);
                     break;
@@ -440,6 +462,7 @@ namespace LoxSharp.Core
                     if (res.IsNull)
                     {
                         RuntimeError("Operands must be numbers or left operand is string.");
+                        return false;
                     }
                     _stack.Push(res);
                     break;
@@ -448,6 +471,7 @@ namespace LoxSharp.Core
                     if (res.IsNull)
                     {
                         RuntimeError("Operands must be numbers.");
+                        return false;
                     }
                     _stack.Push(res);
                     break;
@@ -456,6 +480,7 @@ namespace LoxSharp.Core
                     if (res.IsNull)
                     {
                         RuntimeError("Operands must be numbers.");
+                        return false;
                     }
                     _stack.Push(res);
                     break;
@@ -464,12 +489,24 @@ namespace LoxSharp.Core
                     if (res.IsNull)
                     {
                         RuntimeError("Operands must be numbers.");
+                        return false;
+                    }
+                    _stack.Push(res);
+                    break;
+                case OpCode.MOD:
+                    res = a % b;
+                    if (res.IsNull) 
+                    {
+                        RuntimeError("Operands must be numbers.");
+                        return false;
                     }
                     _stack.Push(res);
                     break;
             }
+            return true;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void CallValue(in Value callee, int argCount, InternalClass? scriptClass = null)
         {
             switch (callee.Type)
@@ -492,6 +529,7 @@ namespace LoxSharp.Core
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void Invoke(string methodName, int argCount)
         {
             ref Value receiver = ref _stack.Peek(argCount);
@@ -526,6 +564,7 @@ namespace LoxSharp.Core
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void InvokeFromClass(InternalClass internalClass, string methodName, int argCount)
         {
             if (!internalClass.Methods.TryGetValue(methodName, out var method))
@@ -546,6 +585,7 @@ namespace LoxSharp.Core
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void CallInternalFunction(in Function function, int argCount, in InternalClass? scriptClass = null)
         {
             if (argCount != function.Arity)
@@ -565,6 +605,8 @@ namespace LoxSharp.Core
             _currentConstants = callFrame.Function.Chunk.Constants;
             _callFrames.Push(callFrame);
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void CallBoundMethod(BoundMethod boundMethod, int argCount)
         {
             _stack.Peek(argCount) = boundMethod.Receiver;
@@ -580,6 +622,7 @@ namespace LoxSharp.Core
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void CreateInstance(InternalClass internalClass, int argCount)
         {
 
@@ -606,6 +649,7 @@ namespace LoxSharp.Core
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void CreateBindMethod(InternalClass internalClass, string methodName)
         {
             if (!internalClass.Methods.TryGetValue(methodName, out var method))
@@ -619,6 +663,7 @@ namespace LoxSharp.Core
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void CallHostFunction(HostFunction function, int argCount)
         {
             Value[] args = new Value[argCount];
@@ -633,6 +678,7 @@ namespace LoxSharp.Core
             _stack.Push(result);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void CallHostMethod(ClassInstance instance, HostMethod method, int argCount)
         {
             Value[] args = new Value[argCount];
@@ -647,6 +693,7 @@ namespace LoxSharp.Core
             _stack.Push(result);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private Value ImportModule(string moduleName)
         {
             // If the module is already loaded, we don't need to do anything.
@@ -706,11 +753,14 @@ namespace LoxSharp.Core
                 }
             }
             //throw new RuntimeException(errorMsg);
-            Config.PrintErrorFn.Invoke(ErrorType.RuntimeError, string.Empty, -1, errorMsg);
+            Function currentFunction = _callFrames.Peek().Function;
+            int currentLine = currentFunction.Chunk.GetLineNumber(_callFrames.Peek().Ip - 1);
+            Config.PrintErrorFn.Invoke(ErrorType.RuntimeError, string.Empty, currentLine, errorMsg);
         }
         #endregion
 
         #region External call 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void CallFunction(in Value callee, params Value[] args)
         {
             _stack.Push(callee);    

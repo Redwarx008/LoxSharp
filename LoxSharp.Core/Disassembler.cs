@@ -31,7 +31,7 @@ namespace LoxSharp.Core
             // line number
             if (offset > 0 && chunk.GetLineNumber(offset) == chunk.GetLineNumber(offset - 1))
             {
-                Console.Write("   | ");
+                Console.Write("  | ");
             }
             else
             {
@@ -55,6 +55,7 @@ namespace LoxSharp.Core
                 case OpCode.ADD:
                 case OpCode.SUBTRACT:
                 case OpCode.MULTIPLY:
+                case OpCode.MOD:
                 case OpCode.DIVIDE:
                 case OpCode.NOT:
                 case OpCode.NEGATE:
@@ -64,14 +65,16 @@ namespace LoxSharp.Core
                     return SimpleInstruction(instruction, offset);
                 case OpCode.CALL:
                     return ByteInstruction(instruction, chunk, offset);
+                case OpCode.GET_LOCAL:
+                case OpCode.SET_LOCAL:
+                    return ShortInstruction(instruction, chunk, offset);
                 case OpCode.INVOKE:
                     return InvokeInstruction(instruction, chunk, offset);
                 case OpCode.GET_MODULE_VAR:
                 case OpCode.SET_MODULE_VAR:
                 case OpCode.DEFINE_MODULE_VAR:
                     return ModuleVariableInstruction(instruction, chunk, offset, variables);
-                case OpCode.GET_LOCAL:
-                case OpCode.SET_LOCAL:
+
                 case OpCode.GET_PROPERTY:
                 case OpCode.SET_PROPERTY:
                 case OpCode.DEFINE_CLASS:
@@ -135,6 +138,12 @@ namespace LoxSharp.Core
             return offset + 2;
         }
 
+        private static int ShortInstruction(OpCode instruction, Chunk chunk, int offset) 
+        { 
+            ushort constant = ReadUShort(chunk, offset);
+            Console.Write($"{instruction.ToString(),-16}{constant,4}\n");
+            return offset + 3;
+        }
         private static int JumpInstruction(OpCode instruction, int direction, Chunk chunk, int offset)
         {
             var high = chunk.Instructions[offset + 1] << 8;

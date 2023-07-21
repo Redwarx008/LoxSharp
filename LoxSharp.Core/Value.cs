@@ -323,15 +323,10 @@ namespace LoxSharp.Core
             {
                 return new Value(a.AsDouble + b.AsDouble);
             }
-            else if (a.IsString && b.IsString)
+            else
             {
-                return new Value(a.AsString + b.AsString);
+                return new Value(a.ToString() + b.ToString());
             }
-            else if (a.IsString && b.IsNumber)
-            {
-                return new Value(a.AsString + b.AsDouble.ToString());
-            }
-            return new Value();
         }
 
         public static Value operator -(in Value a, in Value b)
@@ -357,6 +352,15 @@ namespace LoxSharp.Core
             if (a.IsNumber && b.IsNumber)
             {
                 return new Value(a.AsDouble / b.AsDouble);
+            }
+            return new Value();
+        }
+
+        public static Value operator %(in Value a, in Value b)
+        {
+            if (a.IsNumber && b.IsNumber)
+            {
+                return new Value(a.AsDouble % b.AsDouble);
             }
             return new Value();
         }

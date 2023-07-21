@@ -24,7 +24,6 @@ namespace LoxSharp.Core
             _keyWords["if"] = TokenType.IF;
             _keyWords["nil"] = TokenType.NULL;
             _keyWords["or"] = TokenType.OR;
-            _keyWords["print"] = TokenType.PRINT;
             _keyWords["return"] = TokenType.RETURN;
             _keyWords["super"] = TokenType.SUPER;
             _keyWords["this"] = TokenType.THIS;
@@ -86,6 +85,7 @@ namespace LoxSharp.Core
                 case ';': return MakeToken(TokenType.SEMICOLON);
                 case '*': return MakeToken(TokenType.STAR);
                 case '/': return MakeToken(TokenType.SLASH);
+                case '%': return MakeToken(TokenType.PERCENT);
                 case '!':
                     return MakeToken(Match('=') ? TokenType.BANG_EQUAL : TokenType.BANG);
                 case '=':
