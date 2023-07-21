@@ -1,4 +1,5 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System.Diagnostics;
+using System.Runtime.CompilerServices;
 
 namespace LoxSharp.Core
 {
@@ -382,17 +383,43 @@ namespace LoxSharp.Core
                         {
                             string moduleName = ReadConstant16(ref frame).AsString; 
                             _stack.Push(ImportModule(moduleName));
+
+                            if (_stack.Peek().IsNull)
+                            {
+                                return InterpretResult.RuntimeError;
+                            }
+
                             // If we get a function, call it to execute the module body.
                             if (_stack.Peek().IsFunction)
                             {
                                 CallInternalFunction(_stack.Peek().AsFunction, 0);
                             }
-                            else
+                            else if(_stack.Peek().IsModule) 
                             {
                                 // The module has already been loaded. Remember it so we can import
                                 // variables from it if needed.
                                 LastLoadedModule = _stack.Peek().AsModule;
                             }
+                            break;
+                        }
+                    case OpCode.IMPORT_ALL_VARIABLE:
+                        {
+                            Debug.Assert(LastLoadedModule != null);
+                            Module module = new Module(LastLoadedModule.Name);
+                            //  Add to the new module except for the core module.
+                            foreach (var variableIndex in LastLoadedModule.VariableIndexes)
+                            {
+                                string name = variableIndex.Key;
+                                if (LoadedModules[string.Empty].VariableIndexes.ContainsKey(name)) 
+                                {
+                                    continue;
+                                }
+                                int index = variableIndex.Value;
+
+                                module.Variables.Add(LastLoadedModule.Variables[index]);
+                                module.VariableIndexes[name] = module.Variables.Count;
+                            }
+                            _stack.Push(new Value(module)); 
                             break;
                         }
                 }
@@ -715,6 +742,7 @@ namespace LoxSharp.Core
                 RuntimeError($"Could not compile module {moduleName}.");
                 return Value.NUll;
             }
+            LastLoadedModule = compiled.Module;
             return new Value(compiled);
         }
 

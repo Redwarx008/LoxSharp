@@ -1031,6 +1031,7 @@ namespace LoxSharp.Core
             int jumpStart = EmitJump(compile, OpCode.JUMP);
             int jumpAfter = compile.Function.Chunk.Instructions.Count;
 
+            // parser import * as [variable name].
             if (parser.Match(TokenType.STAR)) 
             {
                 parser.Consume(TokenType.AS, "Expect as after '*'");

@@ -45,6 +45,6 @@
         INVOKE,
         DEFINE_CLASS,
         CLASS_METHOD,
-        RETURN
+        RETURN,
     }
 }
