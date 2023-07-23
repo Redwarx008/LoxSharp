@@ -80,9 +80,14 @@ class A
     }
     static static_method()
     {
-        Print("hello world!");
+        return "hello world";
     }
 }
 
 var b = A.static_method;
 
+
+// fun b()
+// {
+//     return "hello world";
+// }

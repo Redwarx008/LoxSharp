@@ -60,7 +60,7 @@ namespace LoxSharp.Core
             else
             {
                 vm.Config.PrintErrorFn?.Invoke(ErrorType.OtherError, string.Empty, -1,
-                    $"Unable to find variable named {varName}.");
+                    $"Can't find a variable named {varName}.");
                 return null;
             }
         }
@@ -82,7 +82,7 @@ namespace LoxSharp.Core
             else
             {
                 vm.Config.PrintErrorFn?.Invoke(ErrorType.OtherError, string.Empty, -1,
-                    $"Unable to find function named {funcName}.");
+                    $"Can't find a function named {funcName}.");
                 return null;
             }
         }

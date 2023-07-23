@@ -63,6 +63,7 @@ namespace LoxSharp.Core
                 case OpCode.SET_INDEX:
                 case OpCode.GET_INDEX:
                 case OpCode.IMPORT_ALL_VARIABLE:
+                case OpCode.END_MODULE:
                     return SimpleInstruction(instruction, offset);
                 case OpCode.CALL:
                     return ByteInstruction(instruction, chunk, offset);

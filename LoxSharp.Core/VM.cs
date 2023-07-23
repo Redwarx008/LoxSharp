@@ -409,11 +409,13 @@ namespace LoxSharp.Core
                     case OpCode.RETURN:
                         {
                             Value result = _stack.Pop();
+                            _lastReturn = result;
                             _callFrames.Pop();
                             
                             if (_callFrames.Count == 0)
                             {
-                                _lastReturn = _stack.Pop();
+                                // Finally, the rest of the stack is the main function, abandon it.
+                                _ = _stack.Pop();
                                 return InterpretResult.Success;
                             }
 
