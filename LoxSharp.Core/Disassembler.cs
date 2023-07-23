@@ -62,6 +62,7 @@ namespace LoxSharp.Core
                 case OpCode.RETURN:
                 case OpCode.SET_INDEX:
                 case OpCode.GET_INDEX:
+                case OpCode.IMPORT_ALL_VARIABLE:
                     return SimpleInstruction(instruction, offset);
                 case OpCode.CALL:
                     return ByteInstruction(instruction, chunk, offset);
@@ -78,7 +79,8 @@ namespace LoxSharp.Core
                 case OpCode.GET_PROPERTY:
                 case OpCode.SET_PROPERTY:
                 case OpCode.DEFINE_CLASS:
-                case OpCode.CLASS_METHOD:
+                case OpCode.DEFINE_METHOD:
+                case OpCode.IMPORT_MODULE:
                     return Constant16Instruction(instruction, chunk, offset);
                 case OpCode.JUMP:
                 case OpCode.JUMP_IF_FALSE:

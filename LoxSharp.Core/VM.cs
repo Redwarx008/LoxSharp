@@ -5,7 +5,7 @@ namespace LoxSharp.Core
 {
     internal struct CallFrame
     {
-        public InternalClass? Class { get; set; } = null;
+        public Class? Class { get; set; } = null;
         public Function Function { get; private set; }
         public int Ip { get; set; } = 0;
         public int StackStart { get; private set; }
@@ -17,25 +17,26 @@ namespace LoxSharp.Core
         }
     }
 
-    internal class Coroutine
-    {
-        public ValueStack<CallFrame> CallFrames { get; private set; }
-        public ValueStack<Value> Stack { get; private set; }
-        /// <summary>
-        /// The fiber that ran this one. If this fiber is yielded, control will resume to this one.
-        /// </summary>
-        public Coroutine? Caller { get; set; }
+    // todo : add coroutine support?
+    //internal class Coroutine
+    //{
+    //    public ValueStack<CallFrame> CallFrames { get; private set; }
+    //    public ValueStack<Value> Stack { get; private set; }
+    //    /// <summary> 
+    //    /// The fiber that ran this one. If this fiber is yielded, control will resume to this one.
+    //    /// </summary>
+    //    public Coroutine? Caller { get; set; }
 
-        public Coroutine(Function function)
-        {
-            CallFrames = new ValueStack<CallFrame>(VM.FRAME_MAX);
-            Stack = new ValueStack<Value>(VM.STACK_MAX);
+    //    public Coroutine(Function function)
+    //    {
+    //        CallFrames = new ValueStack<CallFrame>(VM.FRAME_MAX);
+    //        Stack = new ValueStack<Value>(VM.STACK_MAX);
 
-            CallFrames.Push(new CallFrame(function, Stack.Count));
-            // The first slot always holds the function.
-            Stack.Push(new Value(function));
-        }
-    }
+    //        CallFrames.Push(new CallFrame(function, Stack.Count));
+    //        // The first slot always holds the function.
+    //        Stack.Push(new Value(function));
+    //    }
+    //}
 
     public class VM
     {
@@ -47,6 +48,8 @@ namespace LoxSharp.Core
 
         private List<byte> _currentInstructions = null!;
         private List<Value> _currentConstants = null!;
+
+        private Value? _lastReturn;
 
         internal Module? LastLoadedModule { get; private set; }
         internal Dictionary<string, Module> LoadedModules { get; private set; }
@@ -67,30 +70,34 @@ namespace LoxSharp.Core
             InitCoreModule();
         }
 
-        internal InterpretResult Interpret(Function compiledScript)
+        internal InterpretResult Interpret(Function compiledFunc)
         {
-            _stack.Push(new Value(compiledScript));
+            _stack.Push(new Value(compiledFunc));
 
-            CallFrame callframe = new(compiledScript, 0);
+            CallFrame callframe = new(compiledFunc, 0);
             _currentInstructions = callframe.Function.Chunk.Instructions;
             _currentConstants = callframe.Function.Chunk.Constants;
             _callFrames.Push(callframe);
-            return Run();
+
+            InterpretResult interpretResult = Run();
+            _lastReturn = null;
+
+            return interpretResult;
         }
 
         private void InitCoreModule()
         {
             Module coreModule = new Module(string.Empty);
             LoadedModules[coreModule.Name] = coreModule;
-            coreModule.AddVariable(this, nameof(Array), new Value(new Array()));
+            coreModule.SetVariable(nameof(Array), new Value(new Array()));
 
-            HostFunction printFunc = new("Print", (args) =>
+            ForeignFunction printFunc = new("Print", (args) =>
             {
                 if (Config.WriteFunction == null) return Value.NUll;
                 Config.WriteFunction.Invoke(args[0].ToString());
                 return Value.NUll;
             });
-            coreModule.AddVariable(this, printFunc.Name, new Value(printFunc));
+            coreModule.SetVariable(printFunc.Name, new Value(printFunc));
 
             //HostFunction GetClock = new("GetClock", (args) =>
             //{
@@ -187,26 +194,79 @@ namespace LoxSharp.Core
                         }
                     case OpCode.GET_PROPERTY:
                         {
-                            if (!_stack.Peek().IsInstance)
+                            if (_stack.Peek().IsModule)
                             {
-                                RuntimeError("Only instances have properties.");
-                                return InterpretResult.RuntimeError;
-                            }
-
-                            ClassInstance instance = _stack.Peek().AsInstance;
-                            string propertyName = ReadConstant16(ref frame).AsString;
-                            if (instance.Fields.TryGetValue(propertyName, out var value))
-                            {
-                                _stack[_stack.Count - 1] = value;
+                                Module module = _stack.Peek().AsModule;
+                                string varName = ReadConstant16(ref frame).AsString;
+                                if (module.VariableIndexes.TryGetValue(varName, out int index))
+                                {
+                                    _stack[_stack.Count - 1] = module.Variables[index];
+                                }
+                                else
+                                {
+                                    RuntimeError($"The name '{varName}' does not exist in the {module.Name} module.");
+                                    return InterpretResult.RuntimeError;
+                                }
                                 break;
                             }
 
-                            // if property is a method
-                            CreateBindMethod(instance.Class, propertyName);
-                            break;
+                            if (_stack.Peek().IsInstance)
+                            {
+                                ClassInstance instance = _stack.Peek().AsInstance;
+                                string propertyName = ReadConstant16(ref frame).AsString;
+                                if (instance.Fields.TryGetValue(propertyName, out var value))
+                                {
+                                    _stack[_stack.Count - 1] = value;
+                                    break;
+                                }
+
+                                // if property is a method
+                                CreateBindMethod(instance.Class, propertyName);
+                                break;
+                            }
+
+                            if (_stack.Peek().IsClass)
+                            {
+                                Class @class = _stack.Peek().AsClass;
+                                string methodName = ReadConstant16(ref frame).AsString;
+                                if (@class.StaticMethod.TryGetValue(methodName, out var value))
+                                {
+                                    BoundMethod boundMethod = new(_stack.Peek(), value);
+                                    _stack[_stack.Count - 1] = new Value(boundMethod);
+                                    break;
+                                }
+                                else
+                                {
+                                    RuntimeError($"Cannot find a static method named {methodName}.");
+                                }
+                            }
+
+                            RuntimeError("The operation object must be one of module, class, or class instance.");
+                            return InterpretResult.RuntimeError;
                         }
                     case OpCode.SET_PROPERTY:
                         {
+                            if (_stack.Peek(1).IsModule)
+                            {
+                                Module module = _stack.Peek(1).AsModule;
+                                string varName = ReadConstant16(ref frame).AsString;
+
+                                if (module.VariableIndexes.TryGetValue(varName, out int index))
+                                {
+                                    module.Variables[index] = _stack.Peek();
+                                    // remove the second element from the stack.
+                                    Value val = _stack.Pop();
+                                    _stack.Pop();
+                                    _stack.Push(val);
+                                }
+                                else
+                                {
+                                    RuntimeError($"The name '{varName}' does not exist in the {module.Name} module.");
+                                    return InterpretResult.RuntimeError;
+                                }
+                                break;
+                            }
+
                             if (!_stack.Peek(1).IsInstance)
                             {
                                 RuntimeError("Only instances have fields.");
@@ -353,7 +413,7 @@ namespace LoxSharp.Core
                             
                             if (_callFrames.Count == 0)
                             {
-                                _ = _stack.Pop();
+                                _lastReturn = _stack.Pop();
                                 return InterpretResult.Success;
                             }
 
@@ -367,18 +427,27 @@ namespace LoxSharp.Core
                     case OpCode.DEFINE_CLASS:
                         {
                             string className = ReadConstant16(ref frame).AsString;
-                            _stack.Push(new Value(new InternalClass(className)));
+                            _stack.Push(new Value(new Class(className)));
                             break;
                         }
-                    case OpCode.CLASS_METHOD:
+                    case OpCode.DEFINE_METHOD:
                         {
                             string methodName = ReadConstant16(ref frame).AsString;
+                            bool isStatic = ReadConstant16(ref frame).AsBool;
                             ref readonly Value method = ref _stack.Peek();
-                            InternalClass internalClass = _stack.Peek(1).AsClass;
-                            internalClass.Methods[methodName] = method;
+                            Class class_ = _stack.Peek(1).AsClass;
+                            if (!isStatic)
+                            {
+                                class_.Methods[methodName] = method;
+                            }
+                            else
+                            {
+                                class_.StaticMethod[methodName] = method;
+                            }
                             _stack.Pop();
                             break;
                         }
+                    
                     case OpCode.IMPORT_MODULE:
                         {
                             string moduleName = ReadConstant16(ref frame).AsString; 
@@ -392,7 +461,7 @@ namespace LoxSharp.Core
                             // If we get a function, call it to execute the module body.
                             if (_stack.Peek().IsFunction)
                             {
-                                CallInternalFunction(_stack.Peek().AsFunction, 0);
+                                CallFunction(_stack.Peek().AsFunction, 0);
                             }
                             else if(_stack.Peek().IsModule) 
                             {
@@ -400,6 +469,11 @@ namespace LoxSharp.Core
                                 // variables from it if needed.
                                 LastLoadedModule = _stack.Peek().AsModule;
                             }
+                            break;
+                        }
+                    case OpCode.END_MODULE:
+                        {
+                            LastLoadedModule = _callFrames.Peek().Function.Module;
                             break;
                         }
                     case OpCode.IMPORT_ALL_VARIABLE:
@@ -416,10 +490,25 @@ namespace LoxSharp.Core
                                 }
                                 int index = variableIndex.Value;
 
-                                module.Variables.Add(LastLoadedModule.Variables[index]);
                                 module.VariableIndexes[name] = module.Variables.Count;
+                                module.Variables.Add(LastLoadedModule.Variables[index]);
                             }
                             _stack.Push(new Value(module)); 
+                            break;
+                        }
+                    case OpCode.IMPORT_VARIABLE:
+                        {
+                            Debug.Assert(LastLoadedModule != null, "Should have already imported module.");
+                            string sourceVarName = ReadConstant16(ref frame).AsString;
+                            if (LastLoadedModule.VariableIndexes.TryGetValue(sourceVarName, out int variableIndex)) 
+                            {
+                                _stack.Push(LastLoadedModule.Variables[variableIndex]);
+                            }
+                            else
+                            {
+                                RuntimeError($"The name '{sourceVarName}' does not exist in the {LastLoadedModule.Name} module.");
+                                return InterpretResult.RuntimeError;
+                            }
                             break;
                         }
                 }
@@ -534,12 +623,12 @@ namespace LoxSharp.Core
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void CallValue(in Value callee, int argCount, InternalClass? scriptClass = null)
+        private void CallValue(in Value callee, int argCount, Class? enclosingClass = null)
         {
             switch (callee.Type)
             {
-                case Value.ValueType.InternalFunction:
-                    CallInternalFunction(callee.AsFunction, argCount, scriptClass);
+                case Value.ValueType.Function:
+                    CallFunction(callee.AsFunction, argCount, enclosingClass);
                     break;
                 case Value.ValueType.BoundMethod:
                     CallBoundMethod(callee.AsBoundMethod, argCount);
@@ -547,8 +636,8 @@ namespace LoxSharp.Core
                 case Value.ValueType.Class:
                     CreateInstance(callee.AsClass, argCount);
                     break;
-                case Value.ValueType.HostFunction:
-                    CallHostFunction(callee.AsHostFunction, argCount);  
+                case Value.ValueType.ForeignFunction:
+                    CallForeignFunction(callee.AsForeignFunction, argCount);  
                     break;
                 default:
                     RuntimeError("Can only call functions and classes.");
@@ -560,9 +649,28 @@ namespace LoxSharp.Core
         private void Invoke(string methodName, int argCount)
         {
             ref Value receiver = ref _stack.Peek(argCount);
+
+            if (receiver.IsClass)
+            {
+                Class @class = receiver.AsClass;    
+                if (@class.StaticMethod.TryGetValue(methodName, out Value staticMethod))
+                {
+                    switch (staticMethod.Type)
+                    {
+                        case Value.ValueType.Function:
+                            CallFunction(staticMethod.AsFunction, argCount, @class);
+                            break;
+                        case Value.ValueType.ForeignFunction:
+                            CallForeignFunction(staticMethod.AsForeignFunction, argCount);
+                            break;
+                    }
+                }
+                return;
+            }
+
             if (!receiver.IsInstance)
             {
-                RuntimeError("Only instances have methods.");
+                RuntimeError("(Static)Methods can only be called through class or instance.");
             }
             ClassInstance instance = receiver.AsInstance;
             if (instance.Fields.TryGetValue(methodName, out var field))
@@ -572,48 +680,48 @@ namespace LoxSharp.Core
             }
             else
             {
-                if (!instance.Class.Methods.TryGetValue(methodName, out var method))
-                {
-                    RuntimeError($"Undefined method {methodName}");
-                }
-                else
+                if (instance.Class.Methods.TryGetValue(methodName, out var method))
                 {
                     switch (method.Type)
                     {
-                        case Value.ValueType.InternalFunction:
-                            CallInternalFunction(method.AsFunction, argCount, instance.Class);
+                        case Value.ValueType.Function:
+                            CallFunction(method.AsFunction, argCount, instance.Class);
                             break;
-                        case Value.ValueType.HostMethod:
-                            CallHostMethod(instance, method.AsHostMethod, argCount);
+                        case Value.ValueType.ForeignMethod:
+                            CallForeignMethod(instance, method.AsForeignMethod, argCount);
                             break;
                     }
                 }
-            }
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void InvokeFromClass(InternalClass internalClass, string methodName, int argCount)
-        {
-            if (!internalClass.Methods.TryGetValue(methodName, out var method))
-            {
-                RuntimeError($"Undefined method {methodName}");
-            }
-            else
-            {
-                switch (method.Type) 
+                else
                 {
-                    case Value.ValueType.InternalFunction:
-                        CallInternalFunction(method.AsFunction, argCount, internalClass);
-                        break;
-                    case Value.ValueType.HostMethod:
-                        CallHostFunction(method.AsHostFunction, argCount);
-                        break;
+                    RuntimeError($"Undefined method {methodName}");
                 }
             }
         }
 
+        //[MethodImpl(MethodImplOptions.AggressiveInlining)]
+        //private void InvokeFromClass(Class internalClass, string methodName, int argCount)
+        //{
+        //    if (!internalClass.Methods.TryGetValue(methodName, out var method))
+        //    {
+        //        RuntimeError($"Undefined method {methodName}");
+        //    }
+        //    else
+        //    {
+        //        switch (method.Type) 
+        //        {
+        //            case Value.ValueType.Function:
+        //                CallInternalFunction(method.AsFunction, argCount, internalClass);
+        //                break;
+        //            case Value.ValueType.ForeignMethod:
+        //                CallHostMethod(method.AsForeignMethod, argCount);
+        //                break;
+        //        }
+        //    }
+        //}
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void CallInternalFunction(in Function function, int argCount, in InternalClass? scriptClass = null)
+        private void CallFunction(in Function function, int argCount, in Class? enclosingClass = null)
         {
             if (argCount != function.Arity)
             {
@@ -627,7 +735,7 @@ namespace LoxSharp.Core
                 return;
             }
 
-            CallFrame callFrame = new(function, _stack.Count - argCount - 1) { Class = scriptClass };
+            CallFrame callFrame = new(function, _stack.Count - argCount - 1) { Class = enclosingClass };
             _currentInstructions = callFrame.Function.Chunk.Instructions;
             _currentConstants = callFrame.Function.Chunk.Constants;
             _callFrames.Push(callFrame);
@@ -640,33 +748,33 @@ namespace LoxSharp.Core
 
             switch (boundMethod.Function.Type)
             {
-                case Value.ValueType.InternalFunction:
-                    CallInternalFunction(boundMethod.Function.AsFunction, argCount);
+                case Value.ValueType.Function:
+                    CallFunction(boundMethod.Function.AsFunction, argCount);
                     break;
-                case Value.ValueType.HostMethod:
-                    CallHostMethod(boundMethod.Receiver.AsInstance, boundMethod.Function.AsHostMethod, argCount);
+                case Value.ValueType.ForeignMethod:
+                    CallForeignMethod(boundMethod.Receiver.AsInstance, boundMethod.Function.AsForeignMethod, argCount);
                     break;
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void CreateInstance(InternalClass internalClass, int argCount)
+        private void CreateInstance(Class class_, int argCount)
         {
 
-            ClassInstance instance = internalClass.CreateInstance();
+            ClassInstance instance = class_.CreateInstance();
  
             _stack.Peek(argCount) = new Value(instance);
 
             // call initializer
-            if (internalClass.Methods.TryGetValue("init", out var method))
+            if (class_.Methods.TryGetValue("init", out var method))
             {
                 switch (method.Type)
                 {
-                    case Value.ValueType.InternalFunction:
-                        CallInternalFunction(method.AsFunction, argCount, internalClass);
+                    case Value.ValueType.Function:
+                        CallFunction(method.AsFunction, argCount, class_);
                         break;
-                    case Value.ValueType.HostMethod:
-                        CallHostMethod(instance, method.AsHostMethod, argCount);
+                    case Value.ValueType.ForeignMethod:
+                        CallForeignMethod(instance, method.AsForeignMethod, argCount);
                         break;
                 }
             }
@@ -677,9 +785,9 @@ namespace LoxSharp.Core
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void CreateBindMethod(InternalClass internalClass, string methodName)
+        private void CreateBindMethod(Class class_, string methodName)
         {
-            if (!internalClass.Methods.TryGetValue(methodName, out var method))
+            if (!class_.Methods.TryGetValue(methodName, out var method))
             {
                 RuntimeError($"Undefined method '{methodName}'");
             }
@@ -691,7 +799,7 @@ namespace LoxSharp.Core
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void CallHostFunction(HostFunction function, int argCount)
+        private void CallForeignFunction(ForeignFunction function, int argCount)
         {
             Value[] args = new Value[argCount];
             for (int i = 0; i < argCount; ++i)
@@ -706,7 +814,7 @@ namespace LoxSharp.Core
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void CallHostMethod(ClassInstance instance, HostMethod method, int argCount)
+        private void CallForeignMethod(ClassInstance instance, ForeignMethod method, int argCount)
         {
             Value[] args = new Value[argCount];
             for (int i = 0; i < argCount; ++i)
@@ -729,20 +837,19 @@ namespace LoxSharp.Core
                 return new Value(module);
             }
 
-            if (Config.LoadMuduleFunction == null)
+            if (Config.LoadModuleFunction == null)
             {
                 RuntimeError($"Could not load module '{moduleName}'. Unable to find a method to load the module.");
                 return Value.NUll;
             }
 
-            string src = Config.LoadMuduleFunction.Invoke(moduleName);
+            string src = Config.LoadModuleFunction.Invoke(moduleName);
             Function? compiled = Compiler.Compile(this, moduleName, src);
             if (compiled == null)
             {
                 RuntimeError($"Could not compile module {moduleName}.");
                 return Value.NUll;
             }
-            LastLoadedModule = compiled.Module;
             return new Value(compiled);
         }
 
@@ -789,7 +896,7 @@ namespace LoxSharp.Core
 
         #region External call 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void CallFunction(in Value callee, params Value[] args)
+        internal Value? CallFunctionFromForeign(in Value callee, params Value[] args)
         {
             _stack.Push(callee);    
 
@@ -800,6 +907,7 @@ namespace LoxSharp.Core
 
             CallValue(callee, args.Length);
             Run();
+            return _lastReturn;
         }
         #endregion
     }

@@ -1,15 +1,16 @@
 ﻿namespace LoxSharp.Core
 {
-    public class InternalClass
+    public class Class
     {
         public string Name { get; private set; }
 
         public Dictionary<string, Value> Methods { get; private set; }
-
-        public InternalClass(string name)
+        public Dictionary<string, Value> StaticMethod { get; private set; } 
+        public Class(string name)
         {
             Name = name;
             Methods = new Dictionary<string, Value>();
+            StaticMethod = new Dictionary<string, Value>();
         }
 
         public virtual ClassInstance CreateInstance() => new ClassInstance(this);

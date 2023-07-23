@@ -66,3 +66,23 @@
 //     i = i + 1;
 // }
 // Print(sum);
+
+// import a as varA, b as varB  from "ModuleTest";
+// Print(varA);
+// import a, b from "ModuleTest";
+// Print(b);
+
+class A 
+{
+    init()
+    {
+        this.name = "jianglei";
+    }
+    static static_method()
+    {
+        Print("hello world!");
+    }
+}
+
+var b = A.static_method;
+

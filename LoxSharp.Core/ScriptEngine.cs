@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
+using System.Reflection;
+using System.Xml.Linq;
 
 namespace LoxSharp.Core
 {
@@ -21,53 +23,73 @@ namespace LoxSharp.Core
             return vm.Interpret(compiledScript);
         }
 
-        //public void SetGlobal(string name, Value value)
-        //{
-        //    if(_globalValuesIndexs.ContainsKey(name))
-        //    {
-        //        throw new ExtensionException($"A Global variable named {name} already exists.");
-        //    }
-        //    else
-        //    {
-        //        int index = _globalValues.Count;
-        //        _globalValuesIndexs[name] = index;  
-        //        _globalValues.Add(value);
-        //    }
-        //}
+        /// <summary>
+        ///  Set the value of a module variable, overwrite if the value already exists.
+        /// </summary>
+        /// <returns> If set successfully, return <see langword="true"/>. </returns>
+        public static bool SetModuleVariable(VM vm, string varName, Value val) 
+        {
+            if (vm.LastLoadedModule == null) 
+            {
+                vm.Config.PrintErrorFn?.Invoke(ErrorType.OtherError, string.Empty, -1,
+                    $"The script has not been run yet.");
+                return false;
+            }
+            
+            vm.LastLoadedModule.SetVariable(varName, val);
+            return true;
+        }
 
-        //public Value GetGlobal(string name)
-        //{
-        //    if (!_globalValuesIndexs.TryGetValue(name, out int index))
-        //    {
-        //        //  If it does not exist, return null.
-        //        return new Value(); 
-        //    }
+        /// <summary>
+        /// Get the value of a module variable.
+        /// </summary>
+        /// <returns>return <see langword="null"/> if not found. </returns>
+        public static Value? GetModuleVariable(VM vm, string varName)
+        {
+            if (vm.LastLoadedModule == null)
+            {
+                vm.Config.PrintErrorFn?.Invoke(ErrorType.OtherError, string.Empty, -1,
+                    $"The script has not been run yet.");
+                return null;
+            }
 
-        //    return _globalValues[index];
-        //}
+            if (vm.LastLoadedModule.VariableIndexes.TryGetValue(varName, out int index)) 
+            {
+                return vm.LastLoadedModule.Variables[index];    
+            }
+            else
+            {
+                vm.Config.PrintErrorFn?.Invoke(ErrorType.OtherError, string.Empty, -1,
+                    $"Unable to find variable named {varName}.");
+                return null;
+            }
+        }
 
-        //public void CallFunction(Value func, params Value[] args)
-        //{
-        //    VM vm = new(_globalValues);
-        //    vm.CallFunction(func, args);
-        //}
+        public static Value? Call(VM vm, string funcName, params Value[] args)
+        {
+            if (vm.LastLoadedModule == null)
+            {
+                vm.Config.PrintErrorFn?.Invoke(ErrorType.OtherError, string.Empty, -1,
+                    $"The script has not been run yet.");
+                return null;
+            }
 
-        //public void CallFunction(string name, params Value[] args) 
-        //{
-        //    if (!_globalValuesIndexs.TryGetValue(name, out int index))
-        //    {
-        //        throw new ExtensionException($"can't find function named {name}.");
-        //    }
+            Module module = vm.LastLoadedModule;
+            if (module.VariableIndexes.TryGetValue(funcName, out int index))
+            {
+                return vm.CallFunctionFromForeign(module.Variables[index], args);
+            }
+            else
+            {
+                vm.Config.PrintErrorFn?.Invoke(ErrorType.OtherError, string.Empty, -1,
+                    $"Unable to find function named {funcName}.");
+                return null;
+            }
+        }
 
-        //    VM vm = new(_globalValues);
-        //    vm.CallFunction(_globalValues[index], args);
-        //}
-
-        //public void AddGlobalFunction(string name, HostFunctionDelegate hostFunction)
-        //{
-        //    HostFunction function = new(name, hostFunction);
-        //    SetGlobal(name, new Value(function));
-        //}
-
+        public static Value? Call(VM vm, in Value callee, params Value[] args) 
+        {
+            return vm.CallFunctionFromForeign(callee, args);
+        }
     }
 }

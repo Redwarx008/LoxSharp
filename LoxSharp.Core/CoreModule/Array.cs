@@ -6,14 +6,14 @@ using System.Threading.Tasks;
 
 namespace LoxSharp.Core
 {
-    internal class Array : InternalClass
+    internal class Array : Class
     {
         public Array()
             :base("Array")
         {
-            Methods["init"] = new Value(new HostMethod("init", Init));
-            Methods[nameof(Count)] = new Value(new HostMethod(nameof(Count), Count));
-            Methods[nameof(Add)] = new Value(new HostMethod(nameof(Add), Add));
+            Methods["init"] = new Value(new ForeignMethod("init", Init));
+            Methods[nameof(Count)] = new Value(new ForeignMethod(nameof(Count), Count));
+            Methods[nameof(Add)] = new Value(new ForeignMethod(nameof(Add), Add));
         }
 
         public override ClassInstance CreateInstance() => new ArrayInstance(this);

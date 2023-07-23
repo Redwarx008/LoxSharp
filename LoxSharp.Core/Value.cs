@@ -17,9 +17,9 @@ namespace LoxSharp.Core
             Bool,
             Double,
             String,
-            InternalFunction,
-            HostFunction,
-            HostMethod,
+            Function,
+            ForeignFunction,
+            ForeignMethod,
             Class,
             Module,
             Instance,
@@ -67,12 +67,12 @@ namespace LoxSharp.Core
                 return (Function)_obj!;
             }
         }
-        internal readonly InternalClass AsClass
+        internal readonly Class AsClass
         {
             get
             {
                 Debug.Assert(IsClass);
-                return (InternalClass)_obj!;
+                return (Class)_obj!;
             }
         }
         internal readonly Module AsModule
@@ -99,20 +99,20 @@ namespace LoxSharp.Core
                 return (BoundMethod)_obj!;
             }
         }
-        internal readonly HostFunction AsHostFunction
+        internal readonly ForeignFunction AsForeignFunction
         {
             get
             {
                 Debug.Assert(IsHostFunction);
-                return (HostFunction)_obj!;
+                return (ForeignFunction)_obj!;
             }
         }
-        internal readonly HostMethod AsHostMethod
+        internal readonly ForeignMethod AsForeignMethod
         {
             get
             {
                 Debug.Assert(IsHostMethod);
-                return (HostMethod)_obj!;
+                return (ForeignMethod)_obj!;
             }
         }
         internal readonly object? AsObject
@@ -130,13 +130,13 @@ namespace LoxSharp.Core
         public readonly bool IsBool => _type == ValueType.Bool;
         public readonly bool IsNumber => _type == ValueType.Double;
         public readonly bool IsString => _type == ValueType.String;
-        public readonly bool IsFunction => _type == ValueType.InternalFunction;
+        public readonly bool IsFunction => _type == ValueType.Function;
         internal readonly bool IsClass => _type == ValueType.Class;
         internal readonly bool IsModule => _type == ValueType.Module;
         internal readonly bool IsInstance => _type == ValueType.Instance;
         internal readonly bool IsBoundMethod => _type == ValueType.BoundMethod;
-        public readonly bool IsHostFunction => _type == ValueType.HostFunction;
-        public readonly bool IsHostMethod => _type == ValueType.HostMethod;
+        public readonly bool IsHostFunction => _type == ValueType.ForeignFunction;
+        public readonly bool IsHostMethod => _type == ValueType.ForeignMethod;
         public Value(double val)
         {
             _data = new BasicData()
@@ -165,11 +165,11 @@ namespace LoxSharp.Core
         internal Value(Function val)
         {
             _data = default;
-            _type = ValueType.InternalFunction;
+            _type = ValueType.Function;
             _obj = val;
         }
 
-        internal Value(InternalClass val)
+        internal Value(Class val)
         {
             _data = default;
             _type = ValueType.Class;
@@ -197,17 +197,17 @@ namespace LoxSharp.Core
             _obj = val;
         }
 
-        internal Value(HostFunction val)
+        internal Value(ForeignFunction val)
         {
             _data = default;
-            _type= ValueType.HostFunction;  
+            _type= ValueType.ForeignFunction;  
             _obj = val; 
         }
 
-        internal Value(HostMethod val)
+        internal Value(ForeignMethod val)
         {
             _data = default;
-            _type= ValueType.HostMethod;
+            _type= ValueType.ForeignMethod;
             _obj = val;
         }
 
@@ -239,7 +239,7 @@ namespace LoxSharp.Core
                     return AsDouble == other.AsDouble;
                 case ValueType.String:
                     return AsString == other.AsString;
-                case ValueType.InternalFunction:
+                case ValueType.Function:
                     return AsFunction == other.AsFunction;
                 case ValueType.Class:
                     return AsClass == other.AsClass;
@@ -249,8 +249,8 @@ namespace LoxSharp.Core
                     return AsInstance == other.AsInstance;
                 case ValueType.BoundMethod:
                     return AsBoundMethod == other.AsBoundMethod;
-                case ValueType.HostFunction:
-                    return AsHostFunction == other.AsHostFunction;
+                case ValueType.ForeignFunction:
+                    return AsForeignFunction == other.AsForeignFunction;
                 case ValueType.Null:
                     return true;
                 default: return false; // Unreachable.
@@ -276,12 +276,12 @@ namespace LoxSharp.Core
                     return AsDouble.GetHashCode();
                 case ValueType.Null:
                 case ValueType.String:
-                case ValueType.InternalFunction:
+                case ValueType.Function:
                 case ValueType.Class:
                 case ValueType.Instance:
                 case ValueType.BoundMethod:
-                case ValueType.HostFunction:
-                case ValueType.HostMethod:
+                case ValueType.ForeignFunction:
+                case ValueType.ForeignMethod:
                 default:
                     return _obj!.GetHashCode();
             }
@@ -301,7 +301,7 @@ namespace LoxSharp.Core
                     return AsDouble.ToString();
                 case ValueType.String:
                     return $"'{AsString}'";
-                case ValueType.InternalFunction:
+                case ValueType.Function:
                     return AsFunction.ToString();
                 case ValueType.Class:
                     return AsClass.ToString();
@@ -309,10 +309,10 @@ namespace LoxSharp.Core
                     return AsInstance.ToString();
                 case ValueType.BoundMethod:
                     return AsBoundMethod.ToString();
-                case ValueType.HostFunction:
-                    return AsHostFunction.ToString();
-                case ValueType.HostMethod:
-                    return AsHostMethod.ToString();
+                case ValueType.ForeignFunction:
+                    return AsForeignFunction.ToString();
+                case ValueType.ForeignMethod:
+                    return AsForeignMethod.ToString();
                 default:
                     return "type not implemented";
             }

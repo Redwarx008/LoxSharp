@@ -16,7 +16,7 @@ namespace LoxSharp.Core
     /// Loads and returns the source code for the module.
     /// </summary>
     /// <returns>source code</returns>
-    public delegate string LoadMuduleFn(string moduleName);
+    public delegate string LoadModuleFn(string moduleName);
 
     /// <summary>
     /// Displays a string of text to the user.
@@ -31,7 +31,7 @@ namespace LoxSharp.Core
     public class ScriptConfiguration
     {
         public WriteFn? WriteFunction { get; set; }
-        public LoadMuduleFn? LoadMuduleFunction { get; set; }
+        public LoadModuleFn? LoadModuleFunction { get; set; }
         public PrintErrorFn? PrintErrorFn { get; set; }
         public ScriptConfiguration() 
         {

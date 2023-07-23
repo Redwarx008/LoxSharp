@@ -2,11 +2,11 @@
 {
     public class ClassInstance
     {
-        public InternalClass Class { get; private set; }
+        public Class Class { get; private set; }
 
         public Dictionary<string, Value> Fields { get; private set; }
 
-        internal ClassInstance(InternalClass internalClass)
+        internal ClassInstance(Class internalClass)
         {
             Fields = new Dictionary<string, Value>();
             Class = internalClass;

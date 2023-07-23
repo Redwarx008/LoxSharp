@@ -32,6 +32,10 @@ namespace LoxSharp.Core
             _keyWords["while"] = TokenType.WHILE;
             _keyWords["continue"] = TokenType.CONTINUE;
             _keyWords["break"] = TokenType.BREAK;
+            _keyWords["import"] = TokenType.IMPORT;
+            _keyWords["as"] = TokenType.AS;
+            _keyWords["from"] = TokenType.FROM;
+            _keyWords["static"] = TokenType.STATIC;
         }
 
         public Scanner(string source)

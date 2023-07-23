@@ -4,6 +4,7 @@ namespace LoxSharp.Core
 {
     internal class Compiler
     {
+        private const string InitMethodName = "init";
         private const int MAX_CONSTANTS = 65536;
         private const int MAX_VARIABLE_NAME = 64;
         private const int MAX_MODULE_VARS = 65536;
@@ -97,8 +98,9 @@ namespace LoxSharp.Core
         private enum FunctionType
         {
             ModuleFunction,
-            ClassMethod,
-            Initialized,
+            Method,
+            StaticMethod,
+            Constructor,
             Moudle  // top-level
         }
 
@@ -168,7 +170,7 @@ namespace LoxSharp.Core
                 Parser = parser;
                 EnclosingCompile = enclosingCompile;
                 // In the VM, stack slot 0 stores the calling function. 
-                if (functionType == FunctionType.ClassMethod || functionType == FunctionType.Initialized)
+                if (functionType == FunctionType.Method || functionType == FunctionType.Constructor)
                 {
                     LocalVars.Add(new LocalVariabal("this", 0));
                 }
@@ -201,7 +203,7 @@ namespace LoxSharp.Core
             _rules[(int)TokenType.RIGHT_PAREN] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.LEFT_BRACE] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.RIGHT_BRACE] = new ParseRule(null, null, Precedence.None);
-            _rules[(int)TokenType.LEFT_BRACKET] = new ParseRule(ArrayCreate, ArrayOrMapIndex, Precedence.Call);
+            _rules[(int)TokenType.LEFT_BRACKET] = new ParseRule(ArrayCreate, Subscript, Precedence.Call);
             _rules[(int)TokenType.RIGHT_BRACKET] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.COMMA] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.DOT] = new ParseRule(null, Dot, Precedence.Call);
@@ -316,6 +318,7 @@ namespace LoxSharp.Core
 #if DEBUG
             Disassembler.DisassembleFunction(compile.Function);
 #endif
+            EmitOp(compile, OpCode.END_MODULE);
             EmitReturn(compile);
             return compile.Function;
         }
@@ -403,7 +406,7 @@ namespace LoxSharp.Core
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void EmitReturn(CompileState compile)
         {
-            if (compile.FunctionType == FunctionType.Initialized)
+            if (compile.FunctionType == FunctionType.Constructor)
             {
                 EmitOpWithShortArg(compile, OpCode.GET_LOCAL, 0);
             }
@@ -692,6 +695,11 @@ namespace LoxSharp.Core
                 Error(compile, "Can't use 'this' outside of a class.");
             }
 
+            if (compile.FunctionType == FunctionType.StaticMethod)
+            {
+                Error(compile, "Can't use 'this' in a static method.");
+            }
+
             Variable(compile, false);
         }
 
@@ -721,7 +729,7 @@ namespace LoxSharp.Core
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void ArrayOrMapIndex(CompileState compile, bool canAssign)
+        private static void Subscript(CompileState compile, bool canAssign)
         {
             Expression(compile);
             compile.Parser.Consume(TokenType.RIGHT_BRACKET, "Expect ']' after index.");
@@ -824,7 +832,7 @@ namespace LoxSharp.Core
             }
             else
             {
-                if (compile.FunctionType == FunctionType.Initialized)
+                if (compile.FunctionType == FunctionType.Constructor)
                 {
                     throw new CompilerException(parser.Previous, "Can't return a value from an initializer");
                 }
@@ -1030,7 +1038,6 @@ namespace LoxSharp.Core
 
             int jumpStart = EmitJump(compile, OpCode.JUMP);
             int jumpAfter = compile.Function.Chunk.Instructions.Count;
-
             // parser import * as [variable name].
             if (parser.Match(TokenType.STAR)) 
             {
@@ -1061,13 +1068,16 @@ namespace LoxSharp.Core
                     DefineVariable(compile, slot);
                 } while (parser.Match(TokenType.COMMA));
             }
+            int completeJump = EmitJump(compile, OpCode.JUMP);
             PatchJump(compile, jumpStart);
             parser.Consume(TokenType.FROM, "Expect 'from' after variables.");
             parser.Consume(TokenType.STRING, "Expect a module name.");
             int moduleNameConst = AddConstant(compile, new Value(parser.Previous.Lexeme));
+            parser.Consume(TokenType.SEMICOLON, "Expect ';' after variable declaration.");
             // Load the module by name.
             EmitOpWithShortArg(compile, OpCode.IMPORT_MODULE, moduleNameConst);
             EmitLoop(compile, jumpAfter);
+            PatchJump(compile, completeJump);
         }
 
         private static void VarDefinition(CompileState compile)
@@ -1213,16 +1223,36 @@ namespace LoxSharp.Core
 
         private static void ParseClassMethod(CompileState compile)
         {
-            Parser parser = compile.Parser; 
+            Parser parser = compile.Parser;
+            bool isStatic = parser.Match(TokenType.STATIC);
             parser.Consume(TokenType.IDENTIFIER, "Expect method name.");
-            int nameConstIndx = AddConstant(compile, new Value(parser.Previous.Lexeme));
+            bool isConstructor = parser.Previous.Lexeme == InitMethodName;
 
-            FunctionType functionType = parser.Previous.Lexeme == "init" ?
-                FunctionType.Initialized : FunctionType.ClassMethod;
+            int nameConstIndx = AddConstant(compile, new Value(parser.Previous.Lexeme));
+            int isStaticConstIndx = AddConstant(compile, new Value(isStatic));
+
+            FunctionType functionType = FunctionType.Method;
+
+            if (isStatic && isConstructor)
+            {
+                Error(compile, " Constructor can't be static.");
+            }
+
+            if (isStatic) 
+            {
+                functionType = FunctionType.StaticMethod;
+            }
+
+            if (isConstructor)
+            {
+                functionType = FunctionType.Constructor;
+            }
+
 
             ParseFunction(compile, functionType);
 
-            EmitOpWithShortArg(compile, OpCode.CLASS_METHOD, nameConstIndx);
+            EmitOpWithShortArg(compile, OpCode.DEFINE_METHOD, nameConstIndx);
+            EmitShort(compile, isStaticConstIndx);
         }
 
         private static void DefineVariable(CompileState compile, int global)

@@ -1,5 +1,8 @@
 ﻿namespace LoxSharp.Core
 {
+    /// <summary>
+    ///  Used as module function and class methods defined in script.
+    /// </summary>
     internal class Function
     {
         public int Arity { get; set; }

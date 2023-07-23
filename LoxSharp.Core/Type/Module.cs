@@ -33,17 +33,16 @@ namespace LoxSharp.Core
         /// Add top-level variables to the module 
         /// </summary>
         /// <param name="vm"> Used to report errors </param>
-        public void AddVariable(VM vm, string varName, Value val)
+        public void SetVariable(string varName, Value val)
         {
-            if (VariableIndexes.ContainsKey(varName))
+            if (VariableIndexes.TryGetValue(varName, out int index))
             {
-                vm.Config.PrintErrorFn?.Invoke(ErrorType.OtherError, Name, -1, 
-                    $"A variable named {varName} already exists.");
+                Variables[index] = val; 
                 return;
             }
 
-            int index = Variables.Count;
-            VariableIndexes[varName] = index;
+            int newIndex = Variables.Count;
+            VariableIndexes[varName] = newIndex;
             Variables.Add(val);
         }
     }

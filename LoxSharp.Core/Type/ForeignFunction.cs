@@ -6,13 +6,16 @@ using System.Threading.Tasks;
 
 namespace LoxSharp.Core
 {
-    public delegate Value HostFunctionDelegate(Value[] args);
+    public delegate Value ForeignFunctionDelegate(Value[] args);
 
-    internal class HostFunction
+    /// <summary>
+    ///  Used as foreign module function and foreign class static methods.
+    /// </summary>
+    internal class ForeignFunction
     {
         public string Name { get; private set; }    
-        public HostFunctionDelegate Function { get; private set; }
-        public HostFunction(string name, HostFunctionDelegate functionDelegate) 
+        public ForeignFunctionDelegate Function { get; private set; }
+        public ForeignFunction(string name, ForeignFunctionDelegate functionDelegate) 
         {
             Name = name;
             Function = functionDelegate;

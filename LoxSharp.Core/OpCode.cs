@@ -44,7 +44,8 @@
         CALL,
         INVOKE,
         DEFINE_CLASS,
-        CLASS_METHOD,
+        DEFINE_METHOD,
+        END_MODULE,
         RETURN,
     }
 }
