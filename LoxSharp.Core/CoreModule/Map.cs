@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace LoxSharp.Core
 {
-    public class Map : Class
+    internal class Map : Class
     {
         public Map()
             : base("Map")
@@ -38,7 +38,7 @@ namespace LoxSharp.Core
             Dictionary<Value, Value> entries = ((MapInstance)instance).Entries;
             if (!entries.TryGetValue(args[0], out var value)) 
             {
-                throw new RuntimeException("Could not find element with specified key.");
+                throw new ForeignRuntimeException("Could not find element with specified key.");
             }
             return value;
         }
@@ -54,7 +54,7 @@ namespace LoxSharp.Core
         {
             if (args.Length > 1)
             {
-                throw new RuntimeException("too many parameters.");
+                throw new ForeignRuntimeException("too many parameters.");
             }
             Dictionary<Value, Value> entries = ((MapInstance)instance).Entries;
             return new Value(entries.ContainsKey(args[0]));
@@ -64,7 +64,7 @@ namespace LoxSharp.Core
         {
             if (args.Length > 1)
             {
-                throw new RuntimeException("too many parameters.");
+                throw new ForeignRuntimeException("too many parameters.");
             }
             Dictionary<Value, Value> entries = ((MapInstance)instance).Entries;
             return new Value((entries.ContainsValue(args[0]))); 
@@ -74,7 +74,7 @@ namespace LoxSharp.Core
         {
             if (args.Length > 1)
             {
-                throw new RuntimeException("too many parameters.");
+                throw new ForeignRuntimeException("too many parameters.");
             }
 
             Dictionary<Value, Value> entries = ((MapInstance)instance).Entries;
@@ -85,7 +85,7 @@ namespace LoxSharp.Core
         {
             if (args.Length > 0)
             {
-                throw new RuntimeException("too many parameters.");
+                throw new ForeignRuntimeException("too many parameters.");
             }
 
             Dictionary<Value, Value> entries = ((MapInstance)instance).Entries;
@@ -97,7 +97,7 @@ namespace LoxSharp.Core
         {
             if (args.Length > 0)
             {
-                throw new RuntimeException("too many parameters.");
+                throw new ForeignRuntimeException("too many parameters.");
             }
 
             Dictionary<Value, Value> entries = ((MapInstance)instance).Entries;

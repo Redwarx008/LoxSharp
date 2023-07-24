@@ -11,7 +11,7 @@ namespace LoxSharp.Core
         internal const int MAX_LOCAL_VARS = 65536;
         internal const int MAX_PARAMETERS = 256;
         private delegate void ParseFunc(CompileState state, bool canAssign);
-        private class Parser
+        internal class Parser
         {
             public VM VM { get; private set; }
             public Module Module { get; private set; }
@@ -28,7 +28,7 @@ namespace LoxSharp.Core
             {
                 VM = vm;
                 Module = module;
-                _scanner = new Scanner(source);
+                _scanner = new Scanner(this, source);
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -36,6 +36,10 @@ namespace LoxSharp.Core
             {
                 Previous = Current;
                 Current = _scanner.ScanToken();
+                if (Current.Type == TokenType.ERROR)
+                {
+                    Advance();
+                }
             }
 
             [method: MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -88,10 +92,8 @@ namespace LoxSharp.Core
                     errorPosition = $"Error at '{Previous.Lexeme}' ";
                 }
 
-                string moduleName = Module.Name ?? "<unknown>";
-
                 VM.Config.PrintErrorFn.Invoke(ErrorType.CompileError,
-                    moduleName, Previous.Line, errorPosition + message);
+                    Module.Name, Previous.Line, errorPosition + message);
             }
         }
 
@@ -398,7 +400,7 @@ namespace LoxSharp.Core
             int offset = compile.Function.Chunk.Instructions.Count - loopStart + 2;
             if (offset > ushort.MaxValue)
             {
-                throw new CompilerException(compile.Parser.Previous, "Loop body too large.");
+                Error(compile, "Loop body too large.");
             }
 
             EmitShort(compile, offset);
@@ -719,7 +721,7 @@ namespace LoxSharp.Core
                     Expression(compile);
                     if (argCount > Byte.MaxValue)
                     {
-                        throw new CompilerException(parser.Previous, "Can't have more than 255 initializer.");
+                        Error(compile, "Can't have more than 255 initializer.");
                     }
                     ++argCount;
                 } while (parser.Match(TokenType.COMMA));
@@ -851,7 +853,7 @@ namespace LoxSharp.Core
             Parser parser = compile.Parser; 
             if (compile.FunctionType == FunctionType.Moudle)
             {
-                throw new CompilerException(parser.Previous, "Can't return from top-level code.");
+                Error(compile, "Can't return from top-level code.");
             }
 
             if (parser.Match(TokenType.SEMICOLON))
@@ -862,7 +864,7 @@ namespace LoxSharp.Core
             {
                 if (compile.FunctionType == FunctionType.Constructor)
                 {
-                    throw new CompilerException(parser.Previous, "Can't return a value from an initializer");
+                    Error(compile, "Can't return a value from an initializer");
                 }
 
                 Expression(compile);
@@ -876,7 +878,7 @@ namespace LoxSharp.Core
         {
             if (compile.LoopStates.Count == 0)
             {
-                throw new CompilerException(compile.Parser.Previous, "Can't use 'continue' outside of a loop.");
+                Error(compile, "Can't use 'continue' outside of a loop.");
             }
 
             compile.Parser.Consume(TokenType.SEMICOLON, "Expect ';' after 'continue'.");
@@ -898,7 +900,7 @@ namespace LoxSharp.Core
         {
             if (compile.LoopStates.Count == 0)
             {
-                throw new CompilerException(compile.Parser.Previous, "Can't use 'continue' outside of a loop.");
+                Error(compile, "Can't use 'continue' outside of a loop.");
             }
 
             compile.Parser.Consume(TokenType.SEMICOLON, "Expect ';' after 'break'.");

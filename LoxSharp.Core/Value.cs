@@ -10,7 +10,7 @@ namespace LoxSharp.Core
         private readonly BasicData _data = default;
         private readonly object? _obj = null;
 
-        internal enum ValueType
+        public enum ValueType
         {
             Undefined,
             Null,
@@ -103,7 +103,7 @@ namespace LoxSharp.Core
         {
             get
             {
-                Debug.Assert(IsHostFunction);
+                Debug.Assert(IsForeignFunction);
                 return (ForeignFunction)_obj!;
             }
         }
@@ -111,7 +111,7 @@ namespace LoxSharp.Core
         {
             get
             {
-                Debug.Assert(IsHostMethod);
+                Debug.Assert(IsForeignMethod);
                 return (ForeignMethod)_obj!;
             }
         }
@@ -123,7 +123,7 @@ namespace LoxSharp.Core
             }
         }
 
-        internal readonly ValueType Type => _type;
+        public readonly ValueType Type => _type;
 
         internal readonly bool IsUndefined => _type == ValueType.Undefined;
         public readonly bool IsNull => _type == ValueType.Null;
@@ -131,12 +131,12 @@ namespace LoxSharp.Core
         public readonly bool IsNumber => _type == ValueType.Double;
         public readonly bool IsString => _type == ValueType.String;
         public readonly bool IsFunction => _type == ValueType.Function;
-        internal readonly bool IsClass => _type == ValueType.Class;
+        public readonly bool IsClass => _type == ValueType.Class;
         internal readonly bool IsModule => _type == ValueType.Module;
-        internal readonly bool IsInstance => _type == ValueType.Instance;
-        internal readonly bool IsBoundMethod => _type == ValueType.BoundMethod;
-        public readonly bool IsHostFunction => _type == ValueType.ForeignFunction;
-        public readonly bool IsHostMethod => _type == ValueType.ForeignMethod;
+        public readonly bool IsInstance => _type == ValueType.Instance;
+        public readonly bool IsBoundMethod => _type == ValueType.BoundMethod;
+        public readonly bool IsForeignFunction => _type == ValueType.ForeignFunction;
+        public readonly bool IsForeignMethod => _type == ValueType.ForeignMethod;
         public Value(double val)
         {
             _data = new BasicData()
@@ -323,10 +323,20 @@ namespace LoxSharp.Core
             {
                 return new Value(a.AsDouble + b.AsDouble);
             }
-            else
+            if (a.IsString && b.IsString)
             {
-                return new Value(a.ToString() + b.ToString());
+                return new Value(a.AsString + b.AsString);
             }
+            if (a.IsNumber && b.IsString)
+            {
+                return new Value(a.ToString() + b.AsString);
+            }
+            if (a.IsString && b.IsNumber)
+            {
+                return new Value(a.AsString + b.ToString());
+            }
+
+            return Value.NUll;
         }
 
         public static Value operator -(in Value a, in Value b)
@@ -398,7 +408,7 @@ namespace LoxSharp.Core
             return new Value();
         }
 
-        public static Value Undefined(string name)
+        internal static Value Undefined(string name)
         {
             return new Value(default, ValueType.Undefined, name);
         }

@@ -11,7 +11,7 @@ namespace LoxSharp.Core
     /// <summary>
     ///  Used as foreign module function and foreign class static methods.
     /// </summary>
-    internal class ForeignFunction
+    public class ForeignFunction
     {
         public string Name { get; private set; }    
         public ForeignFunctionDelegate Function { get; private set; }

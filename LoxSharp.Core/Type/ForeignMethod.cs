@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 namespace LoxSharp.Core
 {
     public delegate Value ForeignMethodDelegate(ClassInstance instance, Value[] args);
-    internal class ForeignMethod
+    public class ForeignMethod
     {
         public string Name { get; private set; }    
 

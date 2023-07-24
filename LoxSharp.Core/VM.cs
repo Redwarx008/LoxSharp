@@ -859,7 +859,7 @@ namespace LoxSharp.Core
                 _stack.Push(result);
                 return true;
             }
-            catch (RuntimeException ex) 
+            catch (ForeignRuntimeException ex) 
             {
                 RuntimeError(ex.Message);
                 return false;
@@ -882,7 +882,7 @@ namespace LoxSharp.Core
                 _stack.Push(result);
                 return true;    
             }
-            catch (RuntimeException ex)
+            catch (ForeignRuntimeException ex)
             {
                 RuntimeError(ex.Message);
                 return false;   

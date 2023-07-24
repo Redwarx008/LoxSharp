@@ -20,7 +20,7 @@
         OR, RETURN, SUPER, THIS, TRUE, VAR, WHILE,
         CONTINUE, BREAK, IMPORT, AS, FROM, STATIC,
 
-        EOF
+        ERROR, EOF
     }
     internal readonly struct Token
     {

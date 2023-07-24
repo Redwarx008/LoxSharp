@@ -3,17 +3,17 @@
     /// <summary>
     ///  Used as module function and class methods defined in script.
     /// </summary>
-    internal class Function
+    public class Function
     {
         public int Arity { get; set; }
-        public Chunk Chunk { get; private set; }
+        internal Chunk Chunk { get; private set; }
         /// <summary>
         /// The module where this function was defined.
         /// </summary>
-        public Module Module { get; set; }
+        internal Module Module { get; set; }
         public string? Name { get; set; }
 
-        public Function(Module module)
+        internal Function(Module module)
         {
             Chunk = new Chunk();
             Arity = 0;

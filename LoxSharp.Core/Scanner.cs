@@ -1,9 +1,11 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System.Net.NetworkInformation;
+using System.Runtime.CompilerServices;
 
 namespace LoxSharp.Core
 {
     internal class Scanner
     {
+        private Compiler.Parser _parser;
         private string _source;
 
         private static Dictionary<string, TokenType> _keyWords;
@@ -38,27 +40,32 @@ namespace LoxSharp.Core
             _keyWords["static"] = TokenType.STATIC;
         }
 
-        public Scanner(string source)
+        public Scanner(Compiler.Parser parser, string source)
         {
+            _parser = parser;   
             _source = source;
         }
-        public  List<Token> ScanSource()
+
+        private void LexError(string message)
+        {
+            _parser.HasError = true;    
+
+            if (_parser.VM.Config.PrintErrorFn == null)
+            {
+                return;
+            }
+
+            _parser.VM.Config.PrintErrorFn.Invoke(ErrorType.CompileError, _parser.Module.Name, _line, message);
+        }
+
+        public List<Token> ScanSource()
         {
             var tokens = new List<Token>();
             while (!IsAtEnd())
             {
                 tokens.Add(ScanToken());
             }
-            Reset();
             return tokens;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void Reset()
-        {
-            _line = 1;
-            _current = 0;
-            _start = 0;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -112,7 +119,8 @@ namespace LoxSharp.Core
                     }
                     else
                     {
-                        throw new ScannerException(_line, "Unexpected character.");
+                        LexError("Unexpected character.");
+                        return MakeToken(TokenType.ERROR);
                     }
             }
         }
@@ -204,7 +212,8 @@ namespace LoxSharp.Core
             }
             if (IsAtEnd())
             {
-                throw new ScannerException(_line, "Unterminated string.");
+                LexError("Unterminated string.");
+                return MakeToken(TokenType.ERROR);
             }
             // The closing ".
             ++_current;

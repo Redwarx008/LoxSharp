@@ -44,13 +44,13 @@ namespace LoxSharp.Core
             List<Value> array = ((ArrayInstance)instance).Values;
             if (!args[0].IsNumber)
             {
-                throw new RuntimeException("Index must be a number.");  
+                throw new ForeignRuntimeException("Index must be a number.");  
             }
 
             int index = (int)args[0].AsDouble;
             if (index < 0 || index >= array.Count)
             {
-                throw new RuntimeException("index out of bounds.");
+                throw new ForeignRuntimeException("index out of bounds.");
             }
 
             return array[index];    
@@ -68,13 +68,13 @@ namespace LoxSharp.Core
             List<Value> array = ((ArrayInstance)instance).Values;
             if (!args[0].IsNumber)
             {
-                throw new RuntimeException("Index must be a number.");
+                throw new ForeignRuntimeException("Index must be a number.");
             }
 
             int index = (int)args[0].AsDouble;
             if (index < 0 || index >= array.Count)
             {
-                throw new RuntimeException("index out of bounds.");
+                throw new ForeignRuntimeException("index out of bounds.");
             }
 
             array.RemoveAt(index);
