@@ -473,14 +473,19 @@ namespace SharpES.Core
                             string methodName = ReadConstant16(ref frame).AsString;
                             bool isStatic = ReadConstant16(ref frame).AsBool;
                             ref readonly Value method = ref _stack.Peek();
-                            Class class_ = _stack.Peek(1).AsClass;
+                            Class @class = _stack.Peek(1).AsClass;
                             if (!isStatic)
                             {
-                                class_.Methods[methodName] = method;
+                                if (@class.Methods.ContainsKey(methodName))
+                                {
+                                    RuntimeError($"A method named {methodName} already exists in the class");
+                                    return InterpretResult.RuntimeError;
+                                }
+                                @class.Methods[methodName] = method;
                             }
                             else
                             {
-                                class_.StaticMethod[methodName] = method;
+                                @class.StaticMethod[methodName] = method;
                             }
                             _stack.Pop();
                             break;

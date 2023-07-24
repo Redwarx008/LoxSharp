@@ -72,17 +72,18 @@
 // import a, b from "ModuleTest";
 // Print(b);
 
-// class A 
-// {
-//     init()
-//     {
-//         this.name = "jianglei";
-//     }
-//     static static_method()
-//     {
-//         return "hello world";
-//     }
-// }
+class A 
+{
+    init()
+    {
+        this.name = "Lilei";
+    }
+    static static_method()
+    {
+        this.name = 123; // error, The this keyword cannot be used in static methods.
+        return "hello world";
+    }
+}
 
 // var b = A.static_method;
 
@@ -92,12 +93,17 @@
 //     return "hello world";
 // }
 
-var map = 
-{   
-    2:"dddd", 
-    3:"xxxx"
-};
-map.Add(0, "jianglei");
-map.Add(1, "laohu");
-map[3] = "hello world";
-Print(map.Get(5));
+// var map = 
+// {   
+//     2:"dddd", 
+//     3:"xxxx"
+// };
+// map.Add(0, "jianglei");
+// map.Add(1, "laohu");
+// map[3] = "hello world";
+// Print(map.Get(5));
+
+{
+    var a = 2;
+    var a = 3;
+}

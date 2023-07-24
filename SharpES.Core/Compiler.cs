@@ -1343,7 +1343,7 @@ namespace SharpES.Core
 
                 if (index == -2)
                 {
-                    Error(compile, "Module variable is already defined.");
+                    Error(compile, $"{varName} is already defined.");
                 }
                 return index;
             }

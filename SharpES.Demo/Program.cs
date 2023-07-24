@@ -32,7 +32,7 @@ namespace SharpES.Demo
                 LoadModuleFunction = LoadModule
             };
             VM vM = new VM(configuration);
-            ScriptEngine.Run(vM, source);
+            InterpretResult res = ScriptEngine.Run(vM, source);
         }
 
         private static string LoadModule(string moduleName)
