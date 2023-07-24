@@ -11,9 +11,11 @@ namespace LoxSharp.Core
         public Array()
             :base("Array")
         {
-            Methods["init"] = new Value(new ForeignMethod("init", Init));
+            Methods[nameof(Init)] = new Value(new ForeignMethod(nameof(Init), Init));
             Methods[nameof(Count)] = new Value(new ForeignMethod(nameof(Count), Count));
             Methods[nameof(Add)] = new Value(new ForeignMethod(nameof(Add), Add));
+            Methods[nameof(Clear)] = new Value(new ForeignMethod(nameof(Clear), Clear));
+            Methods[nameof(RemoveAt)] = new Value(new ForeignMethod(nameof(RemoveAt), RemoveAt));
         }
 
         public override ClassInstance CreateInstance() => new ArrayInstance(this);
@@ -34,6 +36,48 @@ namespace LoxSharp.Core
         private Value Add(ClassInstance instance, Value[] args)
         {
             ((ArrayInstance)instance).Values.Add(args[0]);
+            return Value.NUll;
+        }
+
+        private Value Get(ClassInstance instance, Value[] args) 
+        {
+            List<Value> array = ((ArrayInstance)instance).Values;
+            if (!args[0].IsNumber)
+            {
+                throw new RuntimeException("Index must be a number.");  
+            }
+
+            int index = (int)args[0].AsDouble;
+            if (index < 0 || index >= array.Count)
+            {
+                throw new RuntimeException("index out of bounds.");
+            }
+
+            return array[index];    
+        }
+
+        private Value Clear(ClassInstance instance, Value[] args)
+        {
+            List<Value> array = ((ArrayInstance)instance).Values;
+            array.Clear();
+            return Value.NUll;
+        }
+
+        private Value RemoveAt(ClassInstance instance, Value[] args)
+        {
+            List<Value> array = ((ArrayInstance)instance).Values;
+            if (!args[0].IsNumber)
+            {
+                throw new RuntimeException("Index must be a number.");
+            }
+
+            int index = (int)args[0].AsDouble;
+            if (index < 0 || index >= array.Count)
+            {
+                throw new RuntimeException("index out of bounds.");
+            }
+
+            array.RemoveAt(index);
             return Value.NUll;
         }
     }

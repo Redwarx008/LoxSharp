@@ -6,8 +6,8 @@ namespace LoxSharp.Core
 {
     public readonly struct Value : IEquatable<Value>
     {
-        private readonly ValueType _type;
-        private readonly BasicData _data;
+        private readonly ValueType _type = ValueType.Null;
+        private readonly BasicData _data = default;
         private readonly object? _obj = null;
 
         internal enum ValueType

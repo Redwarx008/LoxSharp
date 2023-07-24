@@ -34,9 +34,9 @@ namespace LoxSharp.Demo
             };
             VM vM = new VM(configuration);
             ScriptEngine.Run(vM, source);
-            var b = ScriptEngine.GetModuleVariable(vM, "b");
-            var res = ScriptEngine.Call(vM, b.Value);
-            Console.WriteLine(res?.AsString ?? null);
+            //var b = ScriptEngine.GetModuleVariable(vM, "b");
+            //var res = ScriptEngine.Call(vM, b.Value);
+            //Console.WriteLine(res?.AsString ?? null);
         }
 
         private static string LoadModule(string moduleName)

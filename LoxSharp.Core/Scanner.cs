@@ -90,6 +90,7 @@ namespace LoxSharp.Core
                 case '*': return MakeToken(TokenType.STAR);
                 case '/': return MakeToken(TokenType.SLASH);
                 case '%': return MakeToken(TokenType.PERCENT);
+                case ':': return MakeToken(TokenType.COLON);
                 case '!':
                     return MakeToken(Match('=') ? TokenType.BANG_EQUAL : TokenType.BANG);
                 case '=':

@@ -4,12 +4,12 @@ namespace LoxSharp.Core
 {
     internal class Compiler
     {
-        private const string InitMethodName = "init";
-        private const int MAX_CONSTANTS = 65536;
-        private const int MAX_VARIABLE_NAME = 64;
-        private const int MAX_MODULE_VARS = 65536;
-        private const int MAX_LOCAL_VARS = 65536;
-        private const int MAX_PARAMETERS = 16;
+        internal const string CONSTRUCTOR_NAME = "Init";
+        internal const int MAX_CONSTANTS = 65536;
+        internal const int MAX_VARIABLE_NAME = 64;
+        internal const int MAX_MODULE_VARS = 65536;
+        internal const int MAX_LOCAL_VARS = 65536;
+        internal const int MAX_PARAMETERS = 256;
         private delegate void ParseFunc(CompileState state, bool canAssign);
         private class Parser
         {
@@ -201,11 +201,12 @@ namespace LoxSharp.Core
 
             _rules[(int)TokenType.LEFT_PAREN] = new ParseRule(Grouping, Call, Precedence.Call);
             _rules[(int)TokenType.RIGHT_PAREN] = new ParseRule(null, null, Precedence.None);
-            _rules[(int)TokenType.LEFT_BRACE] = new ParseRule(null, null, Precedence.None);
+            _rules[(int)TokenType.LEFT_BRACE] = new ParseRule(MapCreate, null, Precedence.None);
             _rules[(int)TokenType.RIGHT_BRACE] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.LEFT_BRACKET] = new ParseRule(ArrayCreate, Subscript, Precedence.Call);
             _rules[(int)TokenType.RIGHT_BRACKET] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.COMMA] = new ParseRule(null, null, Precedence.None);
+            _rules[(int)TokenType.COLON] = new ParseRule(null, null, Precedence.None);
             _rules[(int)TokenType.DOT] = new ParseRule(null, Dot, Precedence.Call);
             _rules[(int)TokenType.MINUS] = new ParseRule(Unary, Binary, Precedence.Term);
             _rules[(int)TokenType.PLUS] = new ParseRule(null, Binary, Precedence.Term);
@@ -707,7 +708,7 @@ namespace LoxSharp.Core
         private static void ArrayCreate(CompileState compile, bool canAssign)
         {
             Parser parser = compile.Parser;
-            int arrayIndex = compile.Parser.Module.VariableIndexes[nameof(Array)];
+            int arrayIndex = parser.Module.VariableIndexes[nameof(Array)];
             EmitOpWithShortArg(compile, OpCode.GET_MODULE_VAR, arrayIndex);
             // initialization list
             byte argCount = 0;
@@ -743,6 +744,33 @@ namespace LoxSharp.Core
                 EmitOp(compile, OpCode.GET_INDEX);
             }
         }
+
+        private static void MapCreate(CompileState compile, bool canAssign) 
+        {
+            Parser parser = compile.Parser;
+            int mapIndex = parser.Module.VariableIndexes[nameof(Map)];
+            EmitOpWithShortArg(compile, OpCode.GET_MODULE_VAR, mapIndex);
+
+            byte argCount = 0;
+            if (!parser.Check(TokenType.RIGHT_BRACE)) 
+            {
+                do
+                {
+                    // parse the key
+                    Expression(compile);
+                    ++argCount;
+                    parser.Consume(TokenType.COLON, "Expect ':' after map key.");
+                    // parse the value
+                    Expression(compile);
+                    ++argCount;
+                } while (parser.Match(TokenType.COMMA));
+            }
+            parser.Consume(TokenType.RIGHT_BRACE, "Expect '}' after map entries.");
+
+            EmitOpWithArg(compile, OpCode.CALL, argCount);
+        }
+
+
 
         #endregion
 
@@ -1226,7 +1254,7 @@ namespace LoxSharp.Core
             Parser parser = compile.Parser;
             bool isStatic = parser.Match(TokenType.STATIC);
             parser.Consume(TokenType.IDENTIFIER, "Expect method name.");
-            bool isConstructor = parser.Previous.Lexeme == InitMethodName;
+            bool isConstructor = parser.Previous.Lexeme == CONSTRUCTOR_NAME;
 
             int nameConstIndx = AddConstant(compile, new Value(parser.Previous.Lexeme));
             int isStaticConstIndx = AddConstant(compile, new Value(isStatic));

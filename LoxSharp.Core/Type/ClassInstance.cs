@@ -6,10 +6,10 @@
 
         public Dictionary<string, Value> Fields { get; private set; }
 
-        internal ClassInstance(Class internalClass)
+        internal ClassInstance(Class @class)
         {
             Fields = new Dictionary<string, Value>();
-            Class = internalClass;
+            Class = @class;
         }
 
         public override string ToString()

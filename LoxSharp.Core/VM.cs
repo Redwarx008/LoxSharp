@@ -90,6 +90,7 @@ namespace LoxSharp.Core
             Module coreModule = new Module(string.Empty);
             LoadedModules[coreModule.Name] = coreModule;
             coreModule.SetVariable(nameof(Array), new Value(new Array()));
+            coreModule.SetVariable(nameof(Map), new Value(new Map()));
 
             ForeignFunction printFunc = new("Print", (args) =>
             {
@@ -221,7 +222,10 @@ namespace LoxSharp.Core
                                 }
 
                                 // if property is a method
-                                CreateBindMethod(instance.Class, propertyName);
+                                if(!CreateBindMethod(instance.Class, propertyName))
+                                {
+                                    return InterpretResult.RuntimeError;
+                                }
                                 break;
                             }
 
@@ -300,17 +304,36 @@ namespace LoxSharp.Core
                                     {
                                         if (!_stack.Peek().IsNumber)
                                         {
-                                            RuntimeError("Expects a number to use as an index.");
+                                            RuntimeError("Index must be a number.");
                                             return InterpretResult.RuntimeError;
                                         }
                                         double index = _stack.Peek().AsDouble;
+                                        if (index < 0 || index >= arrayInstance.Values.Count)
+                                        {
+                                            RuntimeError("index out of bounds.");
+                                            return InterpretResult.RuntimeError;
+                                        }
+
                                         _stack.Discard(2);
                                         _stack.Push(arrayInstance.Values[(int)index]);
                                         break;
                                     }
-                                // todo map
+                                case MapInstance mapInstance:
+                                    {
+                                        ref Value index = ref _stack.Peek();
+                                        _stack.Discard(2);
+                                        if (mapInstance.Entries.TryGetValue(index, out var value))
+                                        {
+                                            _stack.Push(value); 
+                                        }
+                                        else
+                                        {
+                                            _stack.Push(Value.NUll);
+                                        }
+                                        break;
+                                    }
                                 default:
-                                    RuntimeError("Only arrays and maps can use index.");
+                                    RuntimeError("Only arrays and maps can use subscript.");
                                     return InterpretResult.RuntimeError;
                             }
                             break;  
@@ -335,13 +358,23 @@ namespace LoxSharp.Core
                                         }
 
                                         ref Value val = ref _stack.Peek();
+                                        arrayInstance.Values[(int)index] = val;
                                         _stack.Discard(3);
-                                        arrayInstance.Values[(int)index] = val; 
                                         _stack.Push(val);
                                         break;
                                     }
-                                    // todo map
-                                    default :
+   
+                                case MapInstance mapInstance:
+                                    {
+                                        ref Value index = ref _stack.Peek(1);
+                                        ref Value val = ref _stack.Peek();
+
+                                        mapInstance.Entries[index] = val; 
+                                        _stack.Discard(3);
+                                        _stack.Push(val);
+                                        break;
+                                    }
+                                default :
                                     RuntimeError("Only arrays and maps can use index.");
                                     return InterpretResult.RuntimeError;
                             }
@@ -403,7 +436,10 @@ namespace LoxSharp.Core
                         {
                             string methodName = ReadConstant16(ref frame).AsString;
                             int argCount = ReadByte(ref frame);
-                            Invoke(methodName, argCount);
+                            if (!Invoke(methodName, argCount))
+                            {
+                                return InterpretResult.RuntimeError;
+                            }
                             break;
                         }
                     case OpCode.RETURN:
@@ -463,7 +499,10 @@ namespace LoxSharp.Core
                             // If we get a function, call it to execute the module body.
                             if (_stack.Peek().IsFunction)
                             {
-                                CallFunction(_stack.Peek().AsFunction, 0);
+                                if (!CallFunction(_stack.Peek().AsFunction, 0))
+                                {
+                                    return InterpretResult.RuntimeError;
+                                }
                             }
                             else if(_stack.Peek().IsModule) 
                             {
@@ -625,30 +664,26 @@ namespace LoxSharp.Core
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void CallValue(in Value callee, int argCount, Class? enclosingClass = null)
+        private bool CallValue(in Value callee, int argCount, Class? enclosingClass = null)
         {
             switch (callee.Type)
             {
                 case Value.ValueType.Function:
-                    CallFunction(callee.AsFunction, argCount, enclosingClass);
-                    break;
+                    return CallFunction(callee.AsFunction, argCount, enclosingClass);
                 case Value.ValueType.BoundMethod:
-                    CallBoundMethod(callee.AsBoundMethod, argCount);
-                    break;
+                    return CallBoundMethod(callee.AsBoundMethod, argCount);
                 case Value.ValueType.Class:
-                    CreateInstance(callee.AsClass, argCount);
-                    break;
+                    return CreateInstance(callee.AsClass, argCount);
                 case Value.ValueType.ForeignFunction:
-                    CallForeignFunction(callee.AsForeignFunction, argCount);  
-                    break;
+                    return CallForeignFunction(callee.AsForeignFunction, argCount);  
                 default:
                     RuntimeError("Can only call functions and classes.");
-                    break;// Non-callable object type.
+                    return false;// Non-callable object type.
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void Invoke(string methodName, int argCount)
+        private bool Invoke(string methodName, int argCount)
         {
             ref Value receiver = ref _stack.Peek(argCount);
 
@@ -660,45 +695,49 @@ namespace LoxSharp.Core
                     switch (staticMethod.Type)
                     {
                         case Value.ValueType.Function:
-                            CallFunction(staticMethod.AsFunction, argCount, @class);
-                            break;
+                            return CallFunction(staticMethod.AsFunction, argCount, @class);
                         case Value.ValueType.ForeignFunction:
-                            CallForeignFunction(staticMethod.AsForeignFunction, argCount);
-                            break;
-                    }
-                }
-                return;
-            }
-
-            if (!receiver.IsInstance)
-            {
-                RuntimeError("(Static)Methods can only be called through class or instance.");
-            }
-            ClassInstance instance = receiver.AsInstance;
-            if (instance.Fields.TryGetValue(methodName, out var field))
-            {
-                _stack.Peek(argCount) = field;
-                CallValue(field, argCount, instance.Class);
-            }
-            else
-            {
-                if (instance.Class.Methods.TryGetValue(methodName, out var method))
-                {
-                    switch (method.Type)
-                    {
-                        case Value.ValueType.Function:
-                            CallFunction(method.AsFunction, argCount, instance.Class);
-                            break;
-                        case Value.ValueType.ForeignMethod:
-                            CallForeignMethod(instance, method.AsForeignMethod, argCount);
-                            break;
+                            return CallForeignFunction(staticMethod.AsForeignFunction, argCount);
+                        default: return false;
                     }
                 }
                 else
                 {
-                    RuntimeError($"Undefined method {methodName}");
+                    RuntimeError($"Undefined static method {methodName}");
+                    return false;
                 }
             }
+
+            if (receiver.IsInstance)
+            {
+                ClassInstance instance = receiver.AsInstance;
+                if (instance.Fields.TryGetValue(methodName, out var field))
+                {
+                    _stack.Peek(argCount) = field;
+                    CallValue(field, argCount, instance.Class);
+                }
+                else
+                {
+                    if (instance.Class.Methods.TryGetValue(methodName, out var method))
+                    {
+                        switch (method.Type)
+                        {
+                            case Value.ValueType.Function:
+                                return CallFunction(method.AsFunction, argCount, instance.Class);
+                            case Value.ValueType.ForeignMethod:
+                                return CallForeignMethod(instance, method.AsForeignMethod, argCount);
+                            default: return false;
+                        }
+                    }
+                    else
+                    {
+                        RuntimeError($"Undefined method {methodName}");
+                        return false;
+                    }
+                }
+            }
+            RuntimeError("(Static)Methods can only be called through (class)instance.");
+            return false;
         }
 
         //[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -723,44 +762,44 @@ namespace LoxSharp.Core
         //}
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void CallFunction(in Function function, int argCount, in Class? enclosingClass = null)
+        private bool CallFunction(in Function function, int argCount, in Class? enclosingClass = null)
         {
             if (argCount != function.Arity)
             {
                 RuntimeError($"Expected {function.Arity} arguments but got {argCount}.");
-                return;
+                return false;
             }
 
             if (_callFrames.Count == FRAME_MAX)
             {
                 RuntimeError("Stack overflow.");
-                return;
+                return false;
             }
 
             CallFrame callFrame = new(function, _stack.Count - argCount - 1) { Class = enclosingClass };
             _currentInstructions = callFrame.Function.Chunk.Instructions;
             _currentConstants = callFrame.Function.Chunk.Constants;
             _callFrames.Push(callFrame);
+            return true;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void CallBoundMethod(BoundMethod boundMethod, int argCount)
+        private bool CallBoundMethod(BoundMethod boundMethod, int argCount)
         {
             _stack.Peek(argCount) = boundMethod.Receiver;
 
             switch (boundMethod.Function.Type)
             {
                 case Value.ValueType.Function:
-                    CallFunction(boundMethod.Function.AsFunction, argCount);
-                    break;
+                    return CallFunction(boundMethod.Function.AsFunction, argCount);
                 case Value.ValueType.ForeignMethod:
-                    CallForeignMethod(boundMethod.Receiver.AsInstance, boundMethod.Function.AsForeignMethod, argCount);
-                    break;
+                    return CallForeignMethod(boundMethod.Receiver.AsInstance, boundMethod.Function.AsForeignMethod, argCount);
+                default: return false;
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void CreateInstance(Class class_, int argCount)
+        private bool CreateInstance(Class class_, int argCount)
         {
 
             ClassInstance instance = class_.CreateInstance();
@@ -768,40 +807,43 @@ namespace LoxSharp.Core
             _stack.Peek(argCount) = new Value(instance);
 
             // call initializer
-            if (class_.Methods.TryGetValue("init", out var method))
+            if (class_.Methods.TryGetValue(Compiler.CONSTRUCTOR_NAME, out var method))
             {
                 switch (method.Type)
                 {
                     case Value.ValueType.Function:
-                        CallFunction(method.AsFunction, argCount, class_);
-                        break;
+                        return CallFunction(method.AsFunction, argCount, class_);
                     case Value.ValueType.ForeignMethod:
-                        CallForeignMethod(instance, method.AsForeignMethod, argCount);
-                        break;
+                        return CallForeignMethod(instance, method.AsForeignMethod, argCount);
+                    default: return false;
                 }
             }
-            else if (argCount != 0)
+            else 
             {
-                RuntimeError($"Expected 0 arguments but got {argCount}");
+                if (argCount != 0)
+                    RuntimeError($"Expected 0 arguments but got {argCount}");
+                return false;
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void CreateBindMethod(Class class_, string methodName)
+        private bool CreateBindMethod(Class class_, string methodName)
         {
             if (!class_.Methods.TryGetValue(methodName, out var method))
             {
                 RuntimeError($"Undefined method '{methodName}'");
+                return false;
             }
             else
             {
                 BoundMethod boundMethod = new(_stack.Peek(), method);
                 _stack[_stack.Count - 1] = new Value(boundMethod);
+                return true;
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void CallForeignFunction(ForeignFunction function, int argCount)
+        private bool CallForeignFunction(ForeignFunction function, int argCount)
         {
             Value[] args = new Value[argCount];
             for (int i = 0; i < argCount; ++i)
@@ -809,14 +851,23 @@ namespace LoxSharp.Core
                 args[i] = _stack.Peek(argCount - (i + 1));
             }
 
-            Value result = function.Function.Invoke(args);
+            try
+            {
+                Value result = function.Function.Invoke(args);
 
-            _stack.Discard(argCount + 1);
-            _stack.Push(result);
+                _stack.Discard(argCount + 1);
+                _stack.Push(result);
+                return true;
+            }
+            catch (RuntimeException ex) 
+            {
+                RuntimeError(ex.Message);
+                return false;
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void CallForeignMethod(ClassInstance instance, ForeignMethod method, int argCount)
+        private bool CallForeignMethod(ClassInstance instance, ForeignMethod method, int argCount)
         {
             Value[] args = new Value[argCount];
             for (int i = 0; i < argCount; ++i)
@@ -824,10 +875,19 @@ namespace LoxSharp.Core
                 args[i] = _stack.Peek(argCount - (i + 1));
             }
 
-            Value result = method.Method.Invoke(instance, args);
+            try
+            {
+                Value result = method.Method.Invoke(instance, args);
+                _stack.Discard(argCount + 1);
+                _stack.Push(result);
+                return true;    
+            }
+            catch (RuntimeException ex)
+            {
+                RuntimeError(ex.Message);
+                return false;   
+            }
 
-            _stack.Discard(argCount + 1);
-            _stack.Push(result);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -861,7 +921,7 @@ namespace LoxSharp.Core
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void RuntimeError(string message)
+        internal void RuntimeError(string message)
         {
             if (Config.PrintErrorFn == null) return;
 

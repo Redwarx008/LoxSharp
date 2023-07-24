@@ -72,22 +72,32 @@
 // import a, b from "ModuleTest";
 // Print(b);
 
-class A 
-{
-    init()
-    {
-        this.name = "jianglei";
-    }
-    static static_method()
-    {
-        return "hello world";
-    }
-}
+// class A 
+// {
+//     init()
+//     {
+//         this.name = "jianglei";
+//     }
+//     static static_method()
+//     {
+//         return "hello world";
+//     }
+// }
 
-var b = A.static_method;
+// var b = A.static_method;
 
 
 // fun b()
 // {
 //     return "hello world";
 // }
+
+var map = 
+{   
+    2:"dddd", 
+    3:"xxxx"
+};
+map.Add(0, "jianglei");
+map.Add(1, "laohu");
+map[3] = "hello world";
+Print(map.Get(5));
