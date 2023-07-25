@@ -328,7 +328,7 @@ true or false; // true
 
 ### Built-in classes and functions
 
-For convenience, XX has some built-in classes and functions, which are implicitly imported into the current context.
+For convenience, SharpES has some built-in classes and functions, which are implicitly imported into the current context.
 
 #### Array
 
