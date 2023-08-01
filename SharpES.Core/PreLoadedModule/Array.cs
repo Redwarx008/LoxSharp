@@ -14,7 +14,7 @@
 
         public override ClassInstance CreateInstance() => new ArrayInstance(this);
 
-        private Value Init(ClassInstance instance, Value[] args)
+        private Value Init(ClassInstance instance, IList<Value> args)
         {
             List<Value> list = ((ArrayInstance)instance).Values;
             list.AddRange(args);
@@ -22,18 +22,18 @@
             return new Value(instance);
         }
 
-        private Value Count(ClassInstance instance, Value[] args)
+        private Value Count(ClassInstance instance, IList<Value> args)
         {
             return new Value(((ArrayInstance)instance).Values.Count);
         }
 
-        private Value Add(ClassInstance instance, Value[] args)
+        private Value Add(ClassInstance instance, IList<Value> args)
         {
             ((ArrayInstance)instance).Values.Add(args[0]);
             return Value.NUll;
         }
 
-        private Value Get(ClassInstance instance, Value[] args)
+        private Value Get(ClassInstance instance, IList<Value> args)
         {
             List<Value> array = ((ArrayInstance)instance).Values;
             if (!args[0].IsNumber)
@@ -50,14 +50,14 @@
             return array[index];
         }
 
-        private Value Clear(ClassInstance instance, Value[] args)
+        private Value Clear(ClassInstance instance, IList<Value> args)
         {
             List<Value> array = ((ArrayInstance)instance).Values;
             array.Clear();
             return Value.NUll;
         }
 
-        private Value RemoveAt(ClassInstance instance, Value[] args)
+        private Value RemoveAt(ClassInstance instance, IList<Value> args)
         {
             List<Value> array = ((ArrayInstance)instance).Values;
             if (!args[0].IsNumber)

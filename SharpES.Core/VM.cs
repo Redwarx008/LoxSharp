@@ -15,6 +15,11 @@ namespace SharpES.Core
             Function = function;
             StackStart = stackStart;
         }
+
+        public override string ToString()
+        {
+            return $"{Function.ToString()}";
+        }
     }
 
     // todo : add coroutine support?
@@ -60,14 +65,14 @@ namespace SharpES.Core
         {
             LoadedModules = new Dictionary<string, Module>();
             Config = config;
-            InitCoreModule();
+            PreLoadModule();
         }
 
         public VM()
         {
             LoadedModules = new Dictionary<string, Module>();
             Config = new ScriptConfiguration();
-            InitCoreModule();
+            PreLoadModule();
         }
 
         internal InterpretResult Interpret(Function compiledFunc)
@@ -85,7 +90,7 @@ namespace SharpES.Core
             return interpretResult;
         }
 
-        private void InitCoreModule()
+        private void PreLoadModule()
         {
             Module coreModule = new Module(string.Empty);
             LoadedModules[coreModule.Name] = coreModule;
@@ -280,7 +285,7 @@ namespace SharpES.Core
                             ClassInstance instance = _stack.Peek(1).AsInstance;
                             string fieldName = ReadConstant16(ref frame).AsString;
 
-                            if (instance.Fields.ContainsKey(fieldName) || frame.Function.Name == "init")
+                            if (instance.Fields.ContainsKey(fieldName) || frame.Function.Name == Compiler.CONSTRUCTOR_NAME)
                             {
                                 instance.Fields[fieldName] = _stack.Peek();
 
@@ -446,6 +451,9 @@ namespace SharpES.Core
                         {
                             Value result = _stack.Pop();
                             _lastReturn = result;
+                            // The reference to the frame will change,
+                            // so we need to save the value of stackStart first. 
+                            int stackStart = frame.StackStart;
                             _callFrames.Pop();
 
                             if (_callFrames.Count == 0)
@@ -458,7 +466,7 @@ namespace SharpES.Core
                             _currentInstructions = _callFrames.Peek().Function.Chunk.Instructions;
                             _currentConstants = _callFrames.Peek().Function.Chunk.Constants;
 
-                            _stack.Discard(_stack.Count - frame.StackStart);
+                            _stack.Discard(_stack.Count - stackStart);
                             _stack.Push(result);
                             break;
                         }
@@ -850,15 +858,11 @@ namespace SharpES.Core
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private bool CallForeignFunction(ForeignFunction function, int argCount)
         {
-            Value[] args = new Value[argCount];
-            for (int i = 0; i < argCount; ++i)
-            {
-                args[i] = _stack.Peek(argCount - (i + 1));
-            }
+            IList<Value> arguments = _stack.TopSlice(argCount);
 
             try
             {
-                Value result = function.Function.Invoke(args);
+                Value result = function.Function.Invoke(arguments);
 
                 _stack.Discard(argCount + 1);
                 _stack.Push(result);
@@ -874,15 +878,11 @@ namespace SharpES.Core
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private bool CallForeignMethod(ClassInstance instance, ForeignMethod method, int argCount)
         {
-            Value[] args = new Value[argCount];
-            for (int i = 0; i < argCount; ++i)
-            {
-                args[i] = _stack.Peek(argCount - (i + 1));
-            }
+            IList<Value> arguments = _stack.TopSlice(argCount);
 
             try
             {
-                Value result = method.Method.Invoke(instance, args);
+                Value result = method.Method.Invoke(instance, arguments);
                 _stack.Discard(argCount + 1);
                 _stack.Push(result);
                 return true;

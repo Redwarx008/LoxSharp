@@ -1,6 +1,6 @@
 ﻿namespace SharpES.Core
 {
-    public delegate Value ForeignMethodDelegate(ClassInstance instance, Value[] args);
+    public delegate Value ForeignMethodDelegate(ClassInstance instance, IList<Value> args);
     public class ForeignMethod
     {
         public string Name { get; private set; }

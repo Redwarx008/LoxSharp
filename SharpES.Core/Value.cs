@@ -169,7 +169,7 @@ namespace SharpES.Core
             _obj = val;
         }
 
-        internal Value(Class val)
+        public Value(Class val)
         {
             _data = default;
             _type = ValueType.Class;
@@ -197,14 +197,14 @@ namespace SharpES.Core
             _obj = val;
         }
 
-        internal Value(ForeignFunction val)
+        public Value(ForeignFunction val)
         {
             _data = default;
             _type = ValueType.ForeignFunction;
             _obj = val;
         }
 
-        internal Value(ForeignMethod val)
+        public Value(ForeignMethod val)
         {
             _data = default;
             _type = ValueType.ForeignMethod;
@@ -218,7 +218,7 @@ namespace SharpES.Core
             _obj = null;
         }
 
-        private Value(BasicData data, ValueType type, object obj)
+        private Value(BasicData data, ValueType type, object? obj)
         {
             _data = data;
             _type = type;

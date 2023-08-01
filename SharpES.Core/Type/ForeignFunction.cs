@@ -1,6 +1,6 @@
 ﻿namespace SharpES.Core
 {
-    public delegate Value ForeignFunctionDelegate(Value[] args);
+    public delegate Value ForeignFunctionDelegate(IList<Value> args);
 
     /// <summary>
     ///  Used as foreign module function and foreign class static methods.

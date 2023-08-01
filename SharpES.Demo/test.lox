@@ -1,5 +1,5 @@
 // class Zoo {
-//   init() {
+//   Init() {
 //     this.aardvark = 1;
 //     this.baboon   = 1;
 //     this.cat      = 1;
@@ -72,18 +72,18 @@
 // import a, b from "ModuleTest";
 // Print(b);
 
-class A 
-{
-    init()
-    {
-        this.name = "Lilei";
-    }
-    static static_method()
-    {
-        this.name = 123; // error, The this keyword cannot be used in static methods.
-        return "hello world";
-    }
-}
+// class A 
+// {
+//     init()
+//     {
+//         this.name = "Lilei";
+//     }
+//     static static_method()
+//     {
+//         this.name = 123; // error, The this keyword cannot be used in static methods.
+//         return "hello world";
+//     }
+// }
 
 // var b = A.static_method;
 
@@ -101,9 +101,5 @@ class A
 // map.Add(0, "jianglei");
 // map.Add(1, "laohu");
 // map[3] = "hello world";
-// Print(map.Get(5));
+// Print(map.Get(2));
 
-{
-    var a = 2;
-    var a = 3;
-}

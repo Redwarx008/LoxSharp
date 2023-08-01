@@ -32,7 +32,24 @@ namespace SharpES.Demo
                 LoadModuleFunction = LoadModule
             };
             VM vM = new VM(configuration);
+            //ForeignFunction logFunc = new("log", (args) =>
+            //{
+            //    if (args.Count > 1)
+            //    {
+            //        // error handle.
+            //    }
+            //    Console.WriteLine(args[0]);
+            //    return Value.NUll;  // must return a value, which is consistent with the script's behavior.
+            //});
+            //ScriptEngine.RegisterForeignFunction(vM, logFunc);
+
+            //Value? callee = ScriptEngine.GetModuleVariable(vM, string.Empty, "log");
+            //if (callee != null) 
+            //{
+            //    ScriptEngine.Call(vM, callee.Value, new Value("hello world"));
+            //}
             InterpretResult res = ScriptEngine.Run(vM, source);
+
         }
 
         private static string LoadModule(string moduleName)
