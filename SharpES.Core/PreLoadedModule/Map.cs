@@ -17,17 +17,17 @@
 
         public override ClassInstance CreateInstance() => new MapInstance(this);
 
-        private Value Init(ClassInstance instance, Value[] args)
+        private Value Init(ClassInstance instance, IList<Value> args)
         {
             Dictionary<Value, Value> entries = ((MapInstance)instance).Entries;
-            for (int i = 0; i < args.Length; i += 2)
+            for (int i = 0; i < args.Count; i += 2)
             {
                 entries[args[i]] = args[i + 1];
             }
             return new Value(instance);
         }
 
-        private Value Get(ClassInstance instance, Value[] args)
+        private Value Get(ClassInstance instance, IList<Value> args)
         {
             Dictionary<Value, Value> entries = ((MapInstance)instance).Entries;
             if (!entries.TryGetValue(args[0], out var value))
@@ -37,16 +37,16 @@
             return value;
         }
 
-        private Value Add(ClassInstance instance, Value[] args)
+        private Value Add(ClassInstance instance, IList<Value> args)
         {
             Dictionary<Value, Value> entries = ((MapInstance)instance).Entries;
             entries[args[0]] = args[1];
             return Value.NUll;
         }
 
-        private Value ContainsKey(ClassInstance instance, Value[] args)
+        private Value ContainsKey(ClassInstance instance, IList<Value> args)
         {
-            if (args.Length > 1)
+            if (args.Count > 1)
             {
                 throw new ForeignRuntimeException("too many parameters.");
             }
@@ -54,9 +54,9 @@
             return new Value(entries.ContainsKey(args[0]));
         }
 
-        private Value ContainsValue(ClassInstance instance, Value[] args)
+        private Value ContainsValue(ClassInstance instance, IList<Value> args)
         {
-            if (args.Length > 1)
+            if (args.Count > 1)
             {
                 throw new ForeignRuntimeException("too many parameters.");
             }
@@ -64,9 +64,9 @@
             return new Value((entries.ContainsValue(args[0])));
         }
 
-        private Value Remove(ClassInstance instance, Value[] args)
+        private Value Remove(ClassInstance instance, IList<Value> args)
         {
-            if (args.Length > 1)
+            if (args.Count > 1)
             {
                 throw new ForeignRuntimeException("too many parameters.");
             }
@@ -75,9 +75,9 @@
             return new Value(entries.Remove(args[0]));
         }
 
-        private Value Clear(ClassInstance instance, Value[] args)
+        private Value Clear(ClassInstance instance, IList<Value> args)
         {
-            if (args.Length > 0)
+            if (args.Count > 0)
             {
                 throw new ForeignRuntimeException("too many parameters.");
             }
@@ -87,9 +87,9 @@
             return Value.NUll;
         }
 
-        private Value Count(ClassInstance instance, Value[] args)
+        private Value Count(ClassInstance instance, IList<Value> args)
         {
-            if (args.Length > 0)
+            if (args.Count > 0)
             {
                 throw new ForeignRuntimeException("too many parameters.");
             }

@@ -390,3 +390,144 @@ Similarly you can explicitly define a map:
 var array = Map();
 ```
 
+## Interact with C#
+
+ If you want to be able to write programs that check the time, read user input, or access the file system, we need to add foreign functions—callable from SharpEs but implemented in C#.
+
+### Register foreign function
+
+ ``` c#
+ForeignFunction logFunc = new("log", (args) =>
+{
+    if (args.Count > 1)
+    {
+        // error handle.
+    }
+    Console.WriteLine(args[0]);
+    return Value.NUll;  // must return a value, which is consistent with the script's behavior.
+});
+ScriptEngine.RegisterForeignFunction(vM, logFunc);
+ ```
+
+The external function takes arguments from the script but does not check the number of arguments, i.e., the following code works:
+
+``` javescript
+log("hello", "world"); // print hello.
+```
+
+### Register foreign class
+
+Defining an foreign class requires the classes `Class` and `ClassInstance` to be derived.
+
+``` C#
+internal class Array : Class
+{
+    public Array()
+        : base("Array")
+    {
+        Methods[nameof(Init)] = new Value(new ForeignMethod(nameof(Init), Init));
+        Methods[nameof(Count)] = new Value(new ForeignMethod(nameof(Count), Count));
+        Methods[nameof(Add)] = new Value(new ForeignMethod(nameof(Add), Add));
+        Methods[nameof(Clear)] = new Value(new ForeignMethod(nameof(Clear), Clear));
+        Methods[nameof(RemoveAt)] = new Value(new ForeignMethod(nameof(RemoveAt), RemoveAt));
+    }
+    // This method must be overridden to return the specific class intance.
+    public override ClassInstance CreateInstance() => new ArrayInstance(this);
+
+    // The constructor must be named Init to match the behavior of the script.
+    private Value Init(ClassInstance instance, IList<Value> args)
+    {
+        List<Value> list = ((ArrayInstance)instance).Values;
+        list.AddRange(args);
+        // Constructor should return this instance.
+        return new Value(instance);
+    }
+
+    private Value Count(ClassInstance instance, IList<Value> args)
+    {
+        return new Value(((ArrayInstance)instance).Values.Count);
+    }
+
+    private Value Add(ClassInstance instance, IList<Value> args)
+    {
+        ((ArrayInstance)instance).Values.Add(args[0]);
+        return Value.NUll;
+    }
+
+    private Value Get(ClassInstance instance, IList<Value> args)
+    {
+        List<Value> array = ((ArrayInstance)instance).Values;
+        if (!args[0].IsNumber)
+        {
+            throw new ForeignRuntimeException("Index must be a number.");
+        }
+
+        int index = (int)args[0].AsDouble;
+        if (index < 0 || index >= array.Count)
+        {
+            throw new ForeignRuntimeException("index out of bounds.");
+        }
+
+        return array[index];
+    }
+
+    private Value Clear(ClassInstance instance, IList<Value> args)
+    {
+        List<Value> array = ((ArrayInstance)instance).Values;
+        array.Clear();
+        return Value.NUll;
+    }
+
+    private Value RemoveAt(ClassInstance instance, IList<Value> args)
+    {
+        List<Value> array = ((ArrayInstance)instance).Values;
+        if (!args[0].IsNumber)
+        {
+            throw new ForeignRuntimeException("Index must be a number.");
+        }
+
+        int index = (int)args[0].AsDouble;
+        if (index < 0 || index >= array.Count)
+        {
+            throw new ForeignRuntimeException("index out of bounds.");
+        }
+
+        array.RemoveAt(index);
+        return Value.NUll;
+    }
+}
+
+internal class ArrayInstance : ClassInstance
+{
+    public List<Value> Values { get; private set; }
+    public ArrayInstance(Array array)
+        : base(array)
+    {
+        Values = new List<Value>();
+    }
+}
+```
+Note: Registered functions and classes are available in any module.
+
+### Calling SharpES from C#
+
+`ScriptEngine` has two methods to call functions in the module:
+
+``` C#
+public static Value? Call(VM vm, string moduleName, string funcName, params Value[] args)
+
+public static Value? Call(VM vm, in Value callee, params Value[] args)
+```
+
+The former looks for the function with the specified variable name in the specified module, which usually incurs some performance loss, and the latter method is recommended if it needs to be called every frame.
+
+``` C#
+Value? callee = ScriptEngine.GetModuleVariable(vM, string.Empty, "log");
+if (callee != null) 
+{
+    ScriptEngine.Call(vM, callee.Value, new Value("hello world"));
+}
+```
+
+note: The module name of the registered foreign function is empty.
+
