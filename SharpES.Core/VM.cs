@@ -858,7 +858,15 @@ namespace SharpES.Core
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private bool CallForeignFunction(ForeignFunction function, int argCount)
         {
+#if NET7_0_OR_GREATER
             IList<Value> arguments = _stack.TopSlice(argCount);
+#else
+            Value[] arguments = new Value[arguments.Count];
+            for (int i = 0; i < argCount; ++i)
+            {
+                arguments[i] = _stack.Peek(argCount - (i + 1));
+            }
+#endif
 
             try
             {
@@ -878,7 +886,15 @@ namespace SharpES.Core
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private bool CallForeignMethod(ClassInstance instance, ForeignMethod method, int argCount)
         {
+#if NET7_0_OR_GREATER
             IList<Value> arguments = _stack.TopSlice(argCount);
+#else
+            Value[] arguments = new Value[arguments.Count];
+            for (int i = 0; i < argCount; ++i)
+            {
+                arguments[i] = _stack.Peek(argCount - (i + 1));
+            }
+#endif
 
             try
             {
@@ -959,7 +975,7 @@ namespace SharpES.Core
             int currentLine = currentFunction.Chunk.GetLineNumber(_callFrames.Peek().Ip - 1);
             Config.PrintErrorFn.Invoke(ErrorType.RuntimeError, string.Empty, currentLine, errorMsg);
         }
-        #endregion
+#endregion
 
         #region External call 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
