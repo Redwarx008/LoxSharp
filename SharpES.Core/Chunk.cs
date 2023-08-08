@@ -1,4 +1,6 @@
-﻿namespace SharpES.Core
+﻿using System.Collections.Generic;
+
+namespace SharpES.Core
 {
     internal class Chunk
     {

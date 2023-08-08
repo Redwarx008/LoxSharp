@@ -1,4 +1,7 @@
-﻿namespace SharpES.Core
+﻿using System;
+using System.Collections.Generic;
+
+namespace SharpES.Core
 {
     public delegate Value ForeignMethodDelegate(ClassInstance instance, IList<Value> args);
     public class ForeignMethod
@@ -11,7 +14,6 @@
             Name = name;
             Method = method;
         }
-
         public override string ToString()
         {
             return $"<Name>";

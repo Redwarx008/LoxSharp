@@ -1,4 +1,6 @@
-﻿namespace SharpES.Core
+﻿using System.Collections.Generic;
+
+namespace SharpES.Core
 {
     public delegate Value ForeignFunctionDelegate(IList<Value> args);
 

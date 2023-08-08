@@ -1,4 +1,6 @@
-﻿namespace SharpES.Core
+﻿using System.Collections.Generic;
+
+namespace SharpES.Core
 {
     internal class Map : Class
     {
@@ -95,7 +97,7 @@
             }
 
             Dictionary<Value, Value> entries = ((MapInstance)instance).Entries;
-            return new Value(entries.Count());
+            return new Value(entries.Count);
         }
     }
 }

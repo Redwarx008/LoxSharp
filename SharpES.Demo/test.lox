@@ -93,13 +93,13 @@
 //     return "hello world";
 // }
 
-// var map = 
-// {   
-//     2:"dddd", 
-//     3:"xxxx"
-// };
-// map.Add(0, "jianglei");
-// map.Add(1, "laohu");
-// map[3] = "hello world";
-// Print(map.Get(2));
+var map = 
+{   
+    2:"dddd", 
+    3:"xxxx"
+};
+map.Add(0, "jianglei");
+map.Add(1, "laohu");
+map[3] = "hello world";
+Print(map.Get(2));
 

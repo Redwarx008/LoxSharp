@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 
@@ -6,9 +7,9 @@ namespace SharpES.Core
 {
     public readonly struct Value : IEquatable<Value>
     {
-        private readonly ValueType _type = ValueType.Null;
-        private readonly BasicData _data = default;
-        private readonly object? _obj = null;
+        private readonly ValueType _type;
+        private readonly BasicData _data;
+        private readonly object? _obj;
 
         public enum ValueType
         {
@@ -144,6 +145,7 @@ namespace SharpES.Core
                 Double = val,
             };
             _type = ValueType.Double;
+            _obj = null;
         }
 
         public Value(bool val)
@@ -153,6 +155,7 @@ namespace SharpES.Core
                 Bool = val,
             };
             _type = ValueType.Bool;
+            _obj = null;
         }
 
         public Value(string val)
@@ -210,15 +213,17 @@ namespace SharpES.Core
             _type = ValueType.ForeignMethod;
             _obj = val;
         }
+        /// <summary>
+        /// Feature 'parameterless struct constructors' is not available in C# 8.0. 
+        /// </summary>
+        //public Value()
+        //{
+        //    _data = default;
+        //    _type = ValueType.Null;
+        //    _obj = null;
+        //}
 
-        public Value()
-        {
-            _data = default;
-            _type = ValueType.Null;
-            _obj = null;
-        }
-
-        private Value(BasicData data, ValueType type, object obj)
+        private Value(BasicData data, ValueType type, object? obj)
         {
             _data = data;
             _type = type;
@@ -413,6 +418,7 @@ namespace SharpES.Core
             return new Value(default, ValueType.Undefined, name);
         }
 
-        public static Value NUll => new Value();
+        public static Value NUll => new Value(default, ValueType.Null, null);
+
     }
 }

@@ -1,4 +1,6 @@
-﻿namespace SharpES.Core
+﻿using System;
+
+namespace SharpES.Core
 {
     public class ForeignRuntimeException : Exception
     {

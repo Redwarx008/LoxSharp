@@ -1,4 +1,7 @@
-﻿namespace SharpES.Core
+﻿using System;
+using System.Collections.Generic;
+
+namespace SharpES.Core
 {
     internal class Disassembler
     {

@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
 namespace SharpES.Core
@@ -153,7 +155,7 @@ namespace SharpES.Core
             {
                 public int LoopStart { get; set; } = 0;
                 public int ScopeDepth { get; set; } = 0;
-                public List<int> BreakJumpStarts { get; set; } = new();
+                public List<int> BreakJumpStarts { get; set; } = new List<int>();
             }
             public List<LocalVariabal> LocalVars { get; private set; }
             public ClassCompileInfo? EnclosingClass { get; set; }
@@ -266,7 +268,7 @@ namespace SharpES.Core
 
             Parser parser = new Parser(vm, module, source);
 
-            CompileState compile = new(parser, null, FunctionType.Moudle);
+            CompileState compile = new CompileState(parser, null, FunctionType.Moudle);
 
             parser.Advance();
             while (!parser.Match(TokenType.EOF))
@@ -922,7 +924,7 @@ namespace SharpES.Core
         private static void WhileStatement(CompileState compile)
         {
 
-            CompileState.LoopState loopState = new()
+            CompileState.LoopState loopState = new CompileState.LoopState()
             {
                 LoopStart = compile.Function.Chunk.Instructions.Count,
                 ScopeDepth = compile.ScopeDepth
@@ -967,7 +969,7 @@ namespace SharpES.Core
                 ExpressionStatement(compile);
             }
 
-            CompileState.LoopState loopState = new()
+            CompileState.LoopState loopState = new CompileState.LoopState()
             {
                 LoopStart = compile.Function.Chunk.Instructions.Count,
                 ScopeDepth = compile.ScopeDepth
@@ -1403,7 +1405,7 @@ namespace SharpES.Core
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static int AddLocalVariable(CompileState compile, string variableName)
         {
-            LocalVariabal local = new(variableName, -1);
+            LocalVariabal local = new LocalVariabal(variableName, -1);
             int index = compile.LocalVars.Count;
             compile.LocalVars.Add(local);
             return index;

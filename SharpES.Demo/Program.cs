@@ -1,4 +1,6 @@
 ﻿using SharpES.Core;
+using System;
+using System.IO;
 
 namespace SharpES.Demo
 {

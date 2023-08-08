@@ -1,19 +1,22 @@
-﻿using System.Diagnostics;
+﻿using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
 namespace SharpES.Core
 {
     internal struct CallFrame
     {
-        public Class? Class { get; set; } = null;
+        public Class? Class { get; set; }
         public Function Function { get; private set; }
-        public int Ip { get; set; } = 0;
+        public int Ip { get; set; }
         public int StackStart { get; private set; }
 
         public CallFrame(Function function, int stackStart)
         {
             Function = function;
             StackStart = stackStart;
+            Class = null;
+            Ip = 0;
         }
 
         public override string ToString()
@@ -48,8 +51,8 @@ namespace SharpES.Core
         internal const int STACK_MAX = 256;
         internal const int FRAME_MAX = 64;
 
-        private ValueStack<CallFrame> _callFrames = new(FRAME_MAX);
-        private ValueStack<Value> _stack = new(FRAME_MAX * STACK_MAX);
+        private ValueStack<CallFrame> _callFrames = new ValueStack<CallFrame>(FRAME_MAX);
+        private ValueStack<Value> _stack = new ValueStack<Value>(FRAME_MAX * STACK_MAX);
 
         private List<byte> _currentInstructions = null!;
         private List<Value> _currentConstants = null!;
@@ -79,7 +82,7 @@ namespace SharpES.Core
         {
             _stack.Push(new Value(compiledFunc));
 
-            CallFrame callframe = new(compiledFunc, 0);
+            CallFrame callframe = new CallFrame(compiledFunc, 0);
             _currentInstructions = callframe.Function.Chunk.Instructions;
             _currentConstants = callframe.Function.Chunk.Constants;
             _callFrames.Push(callframe);
@@ -97,7 +100,7 @@ namespace SharpES.Core
             coreModule.SetVariable(nameof(Array), new Value(new Array()));
             coreModule.SetVariable(nameof(Map), new Value(new Map()));
 
-            ForeignFunction printFunc = new("Print", (args) =>
+            ForeignFunction printFunc = new ForeignFunction("Print", (args) =>
             {
                 if (Config.WriteFunction == null) return Value.NUll;
                 Config.WriteFunction.Invoke(args[0].ToString());
@@ -240,7 +243,7 @@ namespace SharpES.Core
                                 string methodName = ReadConstant16(ref frame).AsString;
                                 if (@class.StaticMethod.TryGetValue(methodName, out var value))
                                 {
-                                    BoundMethod boundMethod = new(_stack.Peek(), value);
+                                    BoundMethod boundMethod = new BoundMethod(_stack.Peek(), value);
                                     _stack[_stack.Count - 1] = new Value(boundMethod);
                                     break;
                                 }
@@ -789,7 +792,7 @@ namespace SharpES.Core
                 return false;
             }
 
-            CallFrame callFrame = new(function, _stack.Count - argCount - 1) { Class = enclosingClass };
+            CallFrame callFrame = new CallFrame(function, _stack.Count - argCount - 1) { Class = enclosingClass };
             _currentInstructions = callFrame.Function.Chunk.Instructions;
             _currentConstants = callFrame.Function.Chunk.Constants;
             _callFrames.Push(callFrame);
@@ -849,7 +852,7 @@ namespace SharpES.Core
             }
             else
             {
-                BoundMethod boundMethod = new(_stack.Peek(), method);
+                BoundMethod boundMethod = new BoundMethod(_stack.Peek(), method);
                 _stack[_stack.Count - 1] = new Value(boundMethod);
                 return true;
             }
@@ -858,16 +861,12 @@ namespace SharpES.Core
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private bool CallForeignFunction(ForeignFunction function, int argCount)
         {
-#if NET7_0_OR_GREATER
+            //Value[] arguments = new Value[argCount];
+            //for (int i = 0; i < argCount; ++i)
+            //{
+            //    arguments[i] = _stack.Peek(argCount - (i + 1));
+            //}
             IList<Value> arguments = _stack.TopSlice(argCount);
-#else
-            Value[] arguments = new Value[arguments.Count];
-            for (int i = 0; i < argCount; ++i)
-            {
-                arguments[i] = _stack.Peek(argCount - (i + 1));
-            }
-#endif
-
             try
             {
                 Value result = function.Function.Invoke(arguments);
@@ -886,16 +885,12 @@ namespace SharpES.Core
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private bool CallForeignMethod(ClassInstance instance, ForeignMethod method, int argCount)
         {
-#if NET7_0_OR_GREATER
+            //Value[] arguments = new Value[argCount];
+            //for (int i = 0; i < argCount; ++i)
+            //{
+            //    arguments[i] = _stack.Peek(argCount - (i + 1));
+            //}
             IList<Value> arguments = _stack.TopSlice(argCount);
-#else
-            Value[] arguments = new Value[arguments.Count];
-            for (int i = 0; i < argCount; ++i)
-            {
-                arguments[i] = _stack.Peek(argCount - (i + 1));
-            }
-#endif
-
             try
             {
                 Value result = method.Method.Invoke(instance, arguments);
